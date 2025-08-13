@@ -14,6 +14,7 @@ import Sequences from './pages/Sequences'
 import Triggers from './pages/Triggers'
 import Usage from './pages/Usage'
 import Logout from './pages/Logout'
+import SequenceBuilder from './pages/SequenceBuilder'
 
 const router = createBrowserRouter(
 	createRoutesFromElements(
@@ -23,6 +24,7 @@ const router = createBrowserRouter(
 			</Route>
 			<Route element={<AppLayout />}>
 				<Route path="/sequences" element={<Sequences />} />
+				<Route path="/sequences/new" element={<SequenceBuilder />} />
 				<Route path="/triggers" element={<Triggers />} />
 				<Route path="/usage" element={<Usage />} />
 				<Route path="/logout" element={<Logout />} />
