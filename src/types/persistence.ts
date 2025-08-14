@@ -29,4 +29,22 @@ export type WorkflowSummary = {
 	id: string
 	name: string
 	updatedAt: number
-} 
+}
+
+export type WorkflowRunSummary = {
+	id: string
+	status: 'queued' | 'running' | 'succeeded' | 'failed'
+	startedAt: number
+	finishedAt?: number
+}
+
+export type WorkflowRunLog = {
+	id: string
+	type: 'info' | 'error' | 'node-output' | 'system'
+	nodePersistedId?: string
+	message: string
+	data?: Record<string, unknown>
+	timestamp: number
+}
+
+export type WorkflowRunDetail = WorkflowRunSummary & { logs: WorkflowRunLog[] } 

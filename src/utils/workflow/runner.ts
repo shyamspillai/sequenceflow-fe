@@ -5,7 +5,7 @@ import { interpolateTemplate } from '../template'
 
 export type ExecutionResult = {
 	logs: Array<
-		| { kind: 'notification'; nodeId: string; name: string; content: string }
+		| { kind: 'notification' | 'input' | 'decision'; nodeId: string; name: string; content: string }
 	>
 }
 
@@ -38,20 +38,27 @@ export function executeWorkflow(wf: PersistedWorkflow, initialInput?: Record<str
 		const node = nodeById.get(curId)
 		if (!node) continue
 		if (node.type === 'decision') {
-			const decisions = node.config.decisions ?? []
+			const decisions = (node.config as any).decisions ?? []
 			const matches = new Set<string>()
 			for (const d of decisions) {
 				if (d.predicates && d.predicates.length > 0) {
-					const checks = d.predicates.map(p => applyJsonLogic(p.validationLogic, { value: p.targetField ? (payload as any)[p.targetField] : payload }).isValid)
+					const checks = d.predicates.map((p: any) => {
+						const base = payload as Record<string, unknown>
+						const subject = p.targetField ? (base as any)[p.targetField] : base
+						return applyJsonLogic(p.validationLogic, { ...base, value: subject }).isValid
+					})
 					const combiner = d.combiner ?? 'all'
 					const valid = combiner === 'all' ? checks.every(Boolean) : checks.some(Boolean)
 					if (valid) matches.add(d.id)
 				} else {
-					const subject = d.targetField ? (payload as any)[d.targetField] : payload
-					const res = applyJsonLogic(d.validationLogic, { value: subject })
+					const base = payload as Record<string, unknown>
+					const subject = d.targetField ? (base as any)[d.targetField] : base
+					const res = applyJsonLogic(d.validationLogic, { ...base, value: subject })
 					if (res.isValid) matches.add(d.id)
 				}
 			}
+			const matchedIds = Array.from(matches)
+			logs.push({ kind: 'decision', nodeId: (node as any).id, name: node.name, content: `Matched ${matchedIds.length} outcome(s): ${matchedIds.join(', ') || 'none'}` })
 			for (const edge of out.get(curId) ?? []) {
 				if (!edge.sourceHandleId) { stack.push(edge.targetId); continue }
 				if (edge.sourceHandleId.startsWith('out-')) {
@@ -64,7 +71,7 @@ export function executeWorkflow(wf: PersistedWorkflow, initialInput?: Record<str
 			logs.push({ kind: 'notification', nodeId: node.id, name: node.name, content })
 			for (const edge of out.get(curId) ?? []) stack.push(edge.targetId)
 		} else if (node.type === 'inputText') {
-			// payload already set
+			logs.push({ kind: 'input', nodeId: node.id, name: node.name, content: `Input: ${JSON.stringify(payload)}` })
 			for (const edge of out.get(curId) ?? []) stack.push(edge.targetId)
 		}
 	}

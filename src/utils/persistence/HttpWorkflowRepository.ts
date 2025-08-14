@@ -1,23 +1,11 @@
 import type { WorkflowRepository } from './WorkflowRepository'
-import type { PersistedWorkflow, WorkflowSummary } from '../../types/persistence'
-
-function getBaseUrl(): string {
-	const vite = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL as string | undefined
-	const globalVar = (globalThis as any)?.SEQUENCE_BE_BASE_URL as string | undefined
-	return (vite || globalVar || 'http://localhost:3001').replace(/\/$/, '')
-}
+import type { PersistedWorkflow, WorkflowSummary, WorkflowRunLog, WorkflowRunSummary, WorkflowRunDetail } from '../../types/persistence'
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-	const res = await fetch(`${getBaseUrl()}${path}`, {
-		...init,
-		headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-		credentials: 'include',
-	})
-	if (!res.ok) {
-		const text = await res.text().catch(() => '')
-		throw new Error(`HTTP ${res.status} ${res.statusText}: ${text}`)
-	}
-	if (res.status === 204) return undefined as unknown as T
+	const base = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL || ''
+	const url = `${String(base).replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+	const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } })
+	if (!res.ok) throw new Error(`HTTP ${res.status}`)
 	return (await res.json()) as T
 }
 
@@ -53,6 +41,18 @@ export class HttpWorkflowRepository implements WorkflowRepository {
 
 	async delete(id: string): Promise<void> {
 		await http<void>(`/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' })
+	}
+
+	async execute(id: string, input?: Record<string, unknown>): Promise<{ runId: string; logs: WorkflowRunLog[] }> {
+		return http<{ runId: string; logs: WorkflowRunLog[] }>(`/workflows/${encodeURIComponent(id)}/execute`, { method: 'POST', body: JSON.stringify({ input }) })
+	}
+
+	async listRuns(id: string): Promise<WorkflowRunSummary[]> {
+		return http<WorkflowRunSummary[]>(`/workflows/${encodeURIComponent(id)}/runs`)
+	}
+
+	async getRun(id: string, runId: string): Promise<WorkflowRunDetail> {
+		return http<WorkflowRunDetail>(`/workflows/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`)
 	}
 }
 

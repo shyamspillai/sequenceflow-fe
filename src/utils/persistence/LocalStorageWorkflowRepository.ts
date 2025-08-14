@@ -1,8 +1,11 @@
 import type { WorkflowRepository } from './WorkflowRepository'
-import type { PersistedWorkflow, WorkflowSummary } from '../../types/persistence'
+import type { PersistedWorkflow, WorkflowSummary, WorkflowRunDetail, WorkflowRunLog, WorkflowRunSummary } from '../../types/persistence'
 import { getHttpRepository } from './HttpWorkflowRepository'
 
 const STORAGE_KEY = 'sequence-flow.workflows.v1'
+const RUNS_KEY = 'sequence-flow.runs.v1'
+
+type StoredRun = WorkflowRunDetail & { workflowId: string }
 
 function readAll(): PersistedWorkflow[] {
 	try {
@@ -18,6 +21,22 @@ function readAll(): PersistedWorkflow[] {
 
 function writeAll(items: PersistedWorkflow[]) {
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+}
+
+function readRuns(): StoredRun[] {
+	try {
+		const raw = localStorage.getItem(RUNS_KEY)
+		if (!raw) return []
+		const arr = JSON.parse(raw)
+		if (!Array.isArray(arr)) return []
+		return arr
+	} catch {
+		return []
+	}
+}
+
+function writeRuns(runs: StoredRun[]) {
+	localStorage.setItem(RUNS_KEY, JSON.stringify(runs))
 }
 
 export class LocalStorageWorkflowRepository implements WorkflowRepository {
@@ -62,6 +81,36 @@ export class LocalStorageWorkflowRepository implements WorkflowRepository {
 	async delete(id: string): Promise<void> {
 		const all = readAll().filter(w => w.id !== id)
 		writeAll(all)
+	}
+
+	async execute(id: string, input?: Record<string, unknown>): Promise<{ runId: string; logs: WorkflowRunLog[] }> {
+		const wf = await this.get(id)
+		if (!wf) throw new Error('Workflow not found')
+		const runId = crypto.randomUUID()
+		const startedAt = Date.now()
+		// Simple local run log: record a system entry and node-output entries from the FE runner
+		const { executeWorkflow } = await import('../workflow/runner')
+		const result = executeWorkflow(wf, input)
+		const logs: WorkflowRunLog[] = [
+			{ id: crypto.randomUUID(), type: 'system', message: 'Run started', timestamp: startedAt },
+			...result.logs.map(l => ({ id: crypto.randomUUID(), type: 'node-output' as const, nodePersistedId: l.nodeId, message: l.content, data: { name: l.name, kind: l.kind }, timestamp: Date.now() })),
+		]
+		const detail: StoredRun = { workflowId: id, id: runId, status: 'succeeded', startedAt, finishedAt: Date.now(), logs }
+		const allRuns = readRuns()
+		allRuns.unshift(detail)
+		writeRuns(allRuns)
+		return { runId, logs }
+	}
+
+	async listRuns(id: string): Promise<WorkflowRunSummary[]> {
+		return readRuns().filter(r => r.workflowId === id).map(r => ({ id: r.id, status: r.status, startedAt: r.startedAt, finishedAt: r.finishedAt }))
+	}
+
+	async getRun(id: string, runId: string): Promise<WorkflowRunDetail> {
+		const run = readRuns().find(r => r.workflowId === id && r.id === runId)
+		if (!run) throw new Error('Run not found')
+		const { workflowId, ...rest } = run
+		return rest
 	}
 }
 
