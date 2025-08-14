@@ -1,6 +1,7 @@
 import type { Edge, Node as FlowNode } from '@xyflow/react'
 import type { PersistedWorkflow, PersistedNode, PersistedEdge } from '../../types/persistence'
 import type { WorkflowNodeData, WorkflowNode, InputTextNodeData, DecisionNodeData, NotificationNodeData } from '../../types/workflow'
+import { dataFromBaseUsingRegistry } from './registry'
 
 export function toPersistedWorkflow(nodes: Array<FlowNode<WorkflowNodeData>>, edges: Edge[]): Omit<PersistedWorkflow, 'id' | 'createdAt' | 'updatedAt' | 'name'> {
 	const persistedNodes: PersistedNode[] = nodes.map(n => ({
@@ -20,6 +21,8 @@ export function toPersistedWorkflow(nodes: Array<FlowNode<WorkflowNodeData>>, ed
 
 export function fromPersistedWorkflow(wf: PersistedWorkflow): { nodes: Array<FlowNode<WorkflowNodeData>>; edges: Edge[] } {
 	const nodes: Array<FlowNode<WorkflowNodeData>> = wf.nodes.map(p => {
+		const viaRegistry = dataFromBaseUsingRegistry(p.base as any)
+		if (viaRegistry) return { id: p.id, type: (p.base as any).type, position: p.position as any, data: viaRegistry }
 		if (p.base.type === 'inputText') {
 			const data: InputTextNodeData = { base: p.base as any, value: {}, errors: {} }
 			return { id: p.id, type: p.base.type, position: p.position as any, data }

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowRepository'
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
 import type { WorkflowSummary, WorkflowRunDetail, WorkflowRunSummary, PersistedWorkflow, PersistedNode } from '../types/persistence'
-import { executeWorkflow } from '../utils/workflow/runner'
 
 export default function Sequences() {
 	const repo: WorkflowRepository = useMemo(() => getDefaultRepository(), [])

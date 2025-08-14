@@ -1,22 +1,19 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import InputTextNodeComponent from '../components/nodes/InputTextNode'
-import DecisionNodeComponent from '../components/nodes/DecisionNode'
-import type { InputTextNode, InputTextNodeData, InputFieldConfig, DecisionNode, DecisionNodeData, DecisionCondition, NotificationNode, NotificationNodeData, WorkflowNodeData } from '../types/workflow'
+import type { InputTextNodeData, DecisionNode, NotificationNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
-import { inputFieldsToJsonSchema } from '../utils/schema'
-import NotificationNodeComponent from '../components/nodes/NotificationNode'
 import NotificationNodeEditModal from '../components/nodes/NotificationNodeEditModal'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowRepository'
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
 import { toPersistedWorkflow, fromPersistedWorkflow, validateWorkflowForSave } from '../utils/workflow/adapter'
 import { executeWorkflow } from '../utils/workflow/runner'
+import { applyConnectionEffects, createNodeOnDrop, getPalette, getReactFlowNodeTypes } from '../utils/workflow/registry'
 
 function BuilderCanvas() {
-	const nodeTypes = useMemo(() => ({ inputText: InputTextNodeComponent, decision: DecisionNodeComponent, notification: NotificationNodeComponent }), [])
+	const nodeTypes = useMemo(() => getReactFlowNodeTypes(), [])
 	const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode<any>>([])
 	const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 	const { screenToFlowPosition } = useReactFlow()
@@ -110,26 +107,7 @@ function BuilderCanvas() {
 
 	const onConnect = useCallback((connection: Connection) => {
 		setEdges((eds) => addEdge({ ...connection, animated: true }, eds))
-		setNodes((prev) => {
-			const sourceNode = prev.find(n => n.id === connection.source)
-			const targetNode = prev.find(n => n.id === connection.target)
-			if (!sourceNode || !targetNode) return prev
-			if (sourceNode.type === 'inputText' && targetNode.type === 'decision') {
-				const fields: InputFieldConfig[] = (sourceNode.data.base as InputTextNode).config.fields
-				const schema = inputFieldsToJsonSchema(fields)
-				return prev.map(n => n.id === targetNode.id ? { ...n, data: { ...n.data, base: { ...n.data.base, inputSchema: schema } } } : n)
-			}
-			if (sourceNode.type === 'inputText' && targetNode.type === 'notification') {
-				const fields: InputFieldConfig[] = (sourceNode.data.base as InputTextNode).config.fields
-				const schema = inputFieldsToJsonSchema(fields)
-				return prev.map(n => n.id === targetNode.id ? { ...n, data: { ...n.data, base: { ...n.data.base, inputSchema: schema } } } : n)
-			}
-			if (sourceNode.type === 'decision' && targetNode.type === 'notification') {
-				const srcSchema = (sourceNode.data.base as DecisionNode).inputSchema
-				return prev.map(n => n.id === targetNode.id ? { ...n, data: { ...n.data, base: { ...n.data.base, inputSchema: srcSchema } } } : n)
-			}
-			return prev
-		})
+		setNodes((prev) => applyConnectionEffects(prev as Array<FlowNode<WorkflowNodeData>>, connection))
 		setTimeout(() => {
 			setNodes((prev) => {
 				const src = prev.find(n => n.id === connection.source)
@@ -162,65 +140,8 @@ function BuilderCanvas() {
 		event.preventDefault()
 		const type = event.dataTransfer.getData('application/reactflow')
 		const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-		if (type === 'inputText') {
-			const fields: InputFieldConfig[] = []
-			const base: InputTextNode = {
-				id: crypto.randomUUID(),
-				type: 'inputText',
-				name: 'Input Node',
-				inputSchema: {},
-				outputSchema: { },
-				config: { fields },
-				validationLogic: undefined,
-				connections: [],
-			}
-			const node: FlowNode<InputTextNodeData, 'inputText'> = {
-				id: base.id,
-				type: 'inputText',
-				position,
-				data: { base, value: {}, errors: {}, openEditor },
-			}
-			setNodes((prev) => [...prev, node])
-		}
-		if (type === 'decision') {
-			const decisions: DecisionCondition[] = []
-			const base: DecisionNode = {
-				id: crypto.randomUUID(),
-				type: 'decision',
-				name: 'Decision',
-				inputSchema: {},
-				outputSchema: {},
-				config: { decisions },
-				validationLogic: undefined,
-				connections: [],
-			}
-			const node: FlowNode<DecisionNodeData, 'decision'> = {
-				id: base.id,
-				type: 'decision',
-				position,
-				data: { base, sampleInput: {}, openEditor },
-			}
-			setNodes((prev) => [...prev, node])
-		}
-		if (type === 'notification') {
-			const base: NotificationNode = {
-				id: crypto.randomUUID(),
-				type: 'notification',
-				name: 'Notification',
-				inputSchema: {},
-				outputSchema: {},
-				config: { template: '' },
-				validationLogic: undefined,
-				connections: [],
-			}
-			const node: FlowNode<NotificationNodeData, 'notification'> = {
-				id: base.id,
-				type: 'notification',
-				position,
-				data: { base, previewText: '', openEditor },
-			}
-			setNodes((prev) => [...prev, node])
-		}
+		const node = createNodeOnDrop(type, position, openEditor)
+		if (node) setNodes((prev) => [...prev, node])
 	}, [screenToFlowPosition, setNodes, openEditor])
 
 	const editingInputNode = useMemo(() => nodes.find(n => n.id === editingInputNodeId) ?? null, [nodes, editingInputNodeId])
@@ -266,6 +187,8 @@ function BuilderCanvas() {
 		setRunOutput(JSON.stringify(res.logs, null, 2))
 	}
 
+	const palette = useMemo(() => getPalette(), [])
+
 	return (
 		<div className="flex flex-col gap-3">
 			<div className="flex items-center gap-2">
@@ -276,39 +199,20 @@ function BuilderCanvas() {
 			<div className="flex gap-4">
 				<aside className="w-64 shrink-0 border border-slate-200 rounded-lg bg-white p-3 h-[80vh]">
 					<div className="text-sm font-medium text-slate-800 mb-3">Nodes</div>
-					<div
-						className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move mb-2"
-						draggable
-						onDragStart={(event) => {
-							event.dataTransfer.setData('application/reactflow', 'inputText')
-							event.dataTransfer.effectAllowed = 'move'
-						}}
-					>
-						<div className="text-xs font-medium text-slate-700">Input Node</div>
-						<div className="text-[11px] text-slate-500">Multiple fields</div>
-					</div>
-					<div
-						className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move mb-2"
-						draggable
-						onDragStart={(event) => {
-							event.dataTransfer.setData('application/reactflow', 'decision')
-							event.dataTransfer.effectAllowed = 'move'
-						}}
-					>
-						<div className="text-xs font-medium text-slate-700">Decision</div>
-						<div className="text-[11px] text-slate-500">Binary or N-way outcomes</div>
-					</div>
-					<div
-						className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move"
-						draggable
-						onDragStart={(event) => {
-							event.dataTransfer.setData('application/reactflow', 'notification')
-							event.dataTransfer.effectAllowed = 'move'
-						}}
-					>
-						<div className="text-xs font-medium text-slate-700">Notification</div>
-						<div className="text-[11px] text-slate-500">Compose message template</div>
-					</div>
+					{palette.map(p => (
+						<div
+							key={p.type}
+							className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move mb-2"
+							draggable
+							onDragStart={(event) => {
+								event.dataTransfer.setData('application/reactflow', p.type)
+								event.dataTransfer.effectAllowed = 'move'
+							}}
+						>
+							<div className="text-xs font-medium text-slate-700">{p.label}</div>
+							{p.description ? <div className="text-[11px] text-slate-500">{p.description}</div> : null}
+						</div>
+					))}
 				</aside>
 				<div className="flex-1 min-w-0 h-[80vh] rounded-lg overflow-hidden border border-slate-200">
 					<ReactFlow

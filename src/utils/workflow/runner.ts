@@ -1,23 +1,19 @@
 import type { PersistedWorkflow } from '../../types/persistence'
 import type { WorkflowNode } from '../../types/workflow'
-import { applyJsonLogic } from '../validation/jsonLogic'
-import { interpolateTemplate } from '../template'
+import { executeNodeByType, type ExecutionLog } from './registry'
 
 export type ExecutionResult = {
-	logs: Array<
-		| { kind: 'notification' | 'input' | 'decision'; nodeId: string; name: string; content: string }
-	>
+	logs: ExecutionLog[]
 }
 
 function findStartNode(wf: PersistedWorkflow): WorkflowNode | null {
 	const n = wf.nodes.find(n => n.base.type === 'inputText')
-	return n ? n.base : null
+	return n ? (n.base as unknown as WorkflowNode) : null
 }
 
 export function executeWorkflow(wf: PersistedWorkflow, initialInput?: Record<string, unknown>): ExecutionResult {
 	const start = findStartNode(wf)
 	if (!start) return { logs: [] }
-	// Build adjacency
 	const out = new Map<string, Array<{ targetId: string; sourceHandleId?: string }>>()
 	for (const e of wf.edges) {
 		const arr = out.get(e.sourceId) ?? []
@@ -28,51 +24,20 @@ export function executeWorkflow(wf: PersistedWorkflow, initialInput?: Record<str
 
 	const logs: ExecutionResult['logs'] = []
 	let payload: Record<string, unknown> = initialInput ?? {}
-	// For now, propagate a single payload along all outgoing edges.
 	const visited = new Set<string>()
 	const stack: string[] = [start.id]
 	while (stack.length) {
 		const curId = stack.pop()!
 		if (visited.has(curId)) continue
 		visited.add(curId)
-		const node = nodeById.get(curId)
+		const node = nodeById.get(curId) as unknown as WorkflowNode | undefined
 		if (!node) continue
-		if (node.type === 'decision') {
-			const decisions = (node.config as any).decisions ?? []
-			const matches = new Set<string>()
-			for (const d of decisions) {
-				if (d.predicates && d.predicates.length > 0) {
-					const checks = d.predicates.map((p: any) => {
-						const base = payload as Record<string, unknown>
-						const subject = p.targetField ? (base as any)[p.targetField] : base
-						return applyJsonLogic(p.validationLogic, { ...base, value: subject }).isValid
-					})
-					const combiner = d.combiner ?? 'all'
-					const valid = combiner === 'all' ? checks.every(Boolean) : checks.some(Boolean)
-					if (valid) matches.add(d.id)
-				} else {
-					const base = payload as Record<string, unknown>
-					const subject = d.targetField ? (base as any)[d.targetField] : base
-					const res = applyJsonLogic(d.validationLogic, { ...base, value: subject })
-					if (res.isValid) matches.add(d.id)
-				}
+		const { logs: nodeLogs, allowedSourceHandles } = executeNodeByType(node.type, node as WorkflowNode, payload)
+		logs.push(...(nodeLogs ?? []))
+		for (const edge of out.get(curId) ?? []) {
+			if (!allowedSourceHandles || !edge.sourceHandleId || allowedSourceHandles.has(edge.sourceHandleId)) {
+				stack.push(edge.targetId)
 			}
-			const matchedIds = Array.from(matches)
-			logs.push({ kind: 'decision', nodeId: (node as any).id, name: node.name, content: `Matched ${matchedIds.length} outcome(s): ${matchedIds.join(', ') || 'none'}` })
-			for (const edge of out.get(curId) ?? []) {
-				if (!edge.sourceHandleId) { stack.push(edge.targetId); continue }
-				if (edge.sourceHandleId.startsWith('out-')) {
-					const condId = edge.sourceHandleId.slice('out-'.length)
-					if (matches.has(condId)) stack.push(edge.targetId)
-				}
-			}
-		} else if (node.type === 'notification') {
-			const content = interpolateTemplate((node.config as any).template ?? '', payload as Record<string, any>)
-			logs.push({ kind: 'notification', nodeId: node.id, name: node.name, content })
-			for (const edge of out.get(curId) ?? []) stack.push(edge.targetId)
-		} else if (node.type === 'inputText') {
-			logs.push({ kind: 'input', nodeId: node.id, name: node.name, content: `Input: ${JSON.stringify(payload)}` })
-			for (const edge of out.get(curId) ?? []) stack.push(edge.targetId)
 		}
 	}
 	return { logs }
