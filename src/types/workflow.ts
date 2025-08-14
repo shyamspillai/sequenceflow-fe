@@ -42,6 +42,7 @@ export type InputTextNodeData = {
 	value?: Record<string, string | number>
 	errors?: Record<string, string | null>
 	openEditor?: (nodeId: string) => void
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
 export type DecisionPredicate = {
@@ -78,7 +79,26 @@ export type DecisionNodeData = {
 	base: DecisionNode
 	sampleInput?: Record<string, unknown>
 	openEditor?: (nodeId: string) => void
+	inputValue?: Record<string, unknown>
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
-export type WorkflowNode = InputTextNode | DecisionNode
-export type WorkflowNodeData = InputTextNodeData | DecisionNodeData 
+export type NotificationNodeConfig = {
+	template: string
+}
+
+export type NotificationNode = BaseNode<'notification', NotificationNodeConfig> & {
+	inputSchema: JSONSchema
+	outputSchema: {}
+}
+
+export type NotificationNodeData = {
+	base: NotificationNode
+	previewText?: string
+	openEditor?: (nodeId: string) => void
+	inputValue?: Record<string, unknown>
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
+}
+
+export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode
+export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData 

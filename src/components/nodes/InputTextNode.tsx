@@ -40,7 +40,9 @@ function InputTextNodeComponent({ data }: NodeProps<FlowNode<InputTextNodeData>>
 	useEffect(() => {
 		data.value = values
 		data.errors = validations
-	}, [values, validations, data])
+		// Notify graph about output change
+		data.updateOutput?.(base.id, { ...values })
+	}, [values, validations, base.id])
 
 	const expectedKeys = useMemo(() => (base.config.fields ?? []).map(f => f.key), [base.config.fields])
 

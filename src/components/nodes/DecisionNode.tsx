@@ -24,11 +24,15 @@ function DecisionNodeComponent({ data }: NodeProps<FlowNode<DecisionNodeData>>) 
 		}
 	}, [sample])
 
+	const effectiveInput = useMemo(() => {
+		return data.inputValue ?? parsedSample
+	}, [data.inputValue, parsedSample])
+
 	const results = useMemo(() => {
 		return (base.config.decisions ?? []).map(d => {
 			if (d.predicates && d.predicates.length > 0) {
 				const checks = d.predicates.map(p => {
-					const subject = p.targetField ? (parsedSample as any)[p.targetField] : parsedSample
+					const subject = p.targetField ? (effectiveInput as any)[p.targetField] : effectiveInput
 					return applyJsonLogic(p.validationLogic, { value: subject }).isValid
 				})
 				const combiner = d.combiner ?? 'all'
@@ -36,11 +40,11 @@ function DecisionNodeComponent({ data }: NodeProps<FlowNode<DecisionNodeData>>) 
 				return { id: d.id, name: d.name, valid }
 			}
 			// fallback to single rule
-			const subject = d.targetField ? (parsedSample as any)[d.targetField] : parsedSample
+			const subject = d.targetField ? (effectiveInput as any)[d.targetField] : effectiveInput
 			const res = applyJsonLogic(d.validationLogic, { value: subject })
 			return { id: d.id, name: d.name, valid: res.isValid }
 		})
-	}, [base.config.decisions, parsedSample])
+	}, [base.config.decisions, effectiveInput])
 
 	return (
 		<div className="relative rounded-md border border-slate-200 bg-white shadow-sm w-[360px]">
@@ -54,7 +58,16 @@ function DecisionNodeComponent({ data }: NodeProps<FlowNode<DecisionNodeData>>) 
 						Schema available. Provide an object matching the upstream output.
 					</div>
 				)}
-				<textarea className="w-full border rounded p-2 text-xs h-24 font-mono" value={sample} onChange={(e) => setSample(e.target.value)} />
+				{data.inputValue ? (
+					<div>
+						<div className="text-[10px] text-slate-500 mb-1">Upstream input</div>
+						<div className="w-full border rounded p-2 text-[11px] font-mono whitespace-pre-wrap break-words bg-slate-50">
+							{(() => { try { return JSON.stringify(data.inputValue, null, 2) } catch { return '{}' } })()}
+						</div>
+					</div>
+				) : (
+					<textarea className="w-full border rounded p-2 text-xs h-24 font-mono" value={sample} onChange={(e) => setSample(e.target.value)} />
+				)}
 				<div className="space-y-1">
 					{results.map(r => (
 						<div key={r.id} className="flex items-center justify-between text-[11px]">
