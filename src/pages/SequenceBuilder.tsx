@@ -2,26 +2,52 @@ import { useCallback, useMemo, useState } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import InputTextNodeComponent from '../components/nodes/InputTextNode'
-import type { InputTextNode, InputTextNodeData, InputFieldConfig } from '../types/workflow'
+import DecisionNodeComponent from '../components/nodes/DecisionNode'
+import type { InputTextNode, InputTextNodeData, InputFieldConfig, DecisionNode, DecisionNodeData, DecisionCondition } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
+import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
+import { inputFieldsToJsonSchema } from '../utils/schema'
 
 function BuilderCanvas() {
-	const nodeTypes = useMemo(() => ({ inputText: InputTextNodeComponent }), [])
-	const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode<InputTextNodeData, 'inputText'>>([])
+	const nodeTypes = useMemo(() => ({ inputText: InputTextNodeComponent, decision: DecisionNodeComponent }), [])
+	const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode<any>>([])
 	const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 	const { screenToFlowPosition } = useReactFlow()
-	const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
+	const [editingInputNodeId, setEditingInputNodeId] = useState<string | null>(null)
+	const [editingDecisionNodeId, setEditingDecisionNodeId] = useState<string | null>(null)
 
-	const openEditor = useCallback((nodeId: string) => setEditingNodeId(nodeId), [])
+	const openEditor = useCallback((nodeId: string) => {
+		const n = nodes.find(n => n.id === nodeId)
+		if (!n) return
+		if (n.type === 'inputText') setEditingInputNodeId(nodeId)
+		if (n.type === 'decision') setEditingDecisionNodeId(nodeId)
+	}, [nodes])
 
-	const attachEditor = useCallback((n: FlowNode<InputTextNodeData, 'inputText'>): FlowNode<InputTextNodeData, 'inputText'> => ({
+	const attachEditor = useCallback((n: FlowNode<any>): FlowNode<any> => ({
 		...n,
 		data: { ...n.data, openEditor }
 	}), [openEditor])
 
 	const onConnect = useCallback((connection: Connection) => {
 		setEdges((eds) => addEdge({ ...connection, animated: true }, eds))
-	}, [setEdges])
+		// Infer schema if connecting Input -> Decision
+		setNodes((prev) => {
+			const sourceNode = prev.find(n => n.id === connection.source)
+			const targetNode = prev.find(n => n.id === connection.target)
+			if (sourceNode?.type === 'inputText' && targetNode?.type === 'decision') {
+				const fields: InputFieldConfig[] = (sourceNode.data.base as InputTextNode).config.fields
+				const schema = inputFieldsToJsonSchema(fields)
+				return prev.map(n => n.id === targetNode.id ? { ...n, data: { ...n.data, base: { ...n.data.base, inputSchema: schema } } } : n)
+			}
+			return prev
+		})
+	}, [setEdges, setNodes])
+
+	const onEdgesChangeWithSchema = useCallback((changes: any) => {
+		onEdgesChange(changes)
+		// If edges removed, we could clear schema or recompute from remaining inbound edges.
+		// For now, we keep the last known schema.
+	}, [onEdgesChange])
 
 	const onDragOver = useCallback((event: React.DragEvent) => {
 		event.preventDefault()
@@ -31,36 +57,58 @@ function BuilderCanvas() {
 	const onDrop = useCallback((event: React.DragEvent) => {
 		event.preventDefault()
 		const type = event.dataTransfer.getData('application/reactflow')
-		if (type !== 'inputText') return
 		const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-		const fields: InputFieldConfig[] = []
-		const base: InputTextNode = {
-			id: crypto.randomUUID(),
-			type: 'inputText',
-			name: 'Input Node',
-			inputSchema: {},
-			outputSchema: { },
-			config: { fields },
-			validationLogic: undefined,
-			connections: [],
+		if (type === 'inputText') {
+			const fields: InputFieldConfig[] = []
+			const base: InputTextNode = {
+				id: crypto.randomUUID(),
+				type: 'inputText',
+				name: 'Input Node',
+				inputSchema: {},
+				outputSchema: { },
+				config: { fields },
+				validationLogic: undefined,
+				connections: [],
+			}
+			const node: FlowNode<InputTextNodeData, 'inputText'> = {
+				id: base.id,
+				type: 'inputText',
+				position,
+				data: { base, value: {}, errors: {}, openEditor },
+			}
+			setNodes((prev) => [...prev, node])
 		}
-		const node: FlowNode<InputTextNodeData, 'inputText'> = {
-			id: base.id,
-			type: 'inputText',
-			position,
-			data: { base, value: {}, errors: {}, openEditor },
+		if (type === 'decision') {
+			const decisions: DecisionCondition[] = []
+			const base: DecisionNode = {
+				id: crypto.randomUUID(),
+				type: 'decision',
+				name: 'Decision',
+				inputSchema: {},
+				outputSchema: {},
+				config: { decisions },
+				validationLogic: undefined,
+				connections: [],
+			}
+			const node: FlowNode<DecisionNodeData, 'decision'> = {
+				id: base.id,
+				type: 'decision',
+				position,
+				data: { base, sampleInput: {}, openEditor },
+			}
+			setNodes((prev) => [...prev, node])
 		}
-		setNodes((prev) => [...prev, node])
 	}, [screenToFlowPosition, setNodes, openEditor])
 
-	const editingNode = useMemo(() => nodes.find(n => n.id === editingNodeId) ?? null, [nodes, editingNodeId])
+	const editingInputNode = useMemo(() => nodes.find(n => n.id === editingInputNodeId) ?? null, [nodes, editingInputNodeId])
+	const editingDecisionNode = useMemo(() => nodes.find(n => n.id === editingDecisionNodeId) ?? null, [nodes, editingDecisionNodeId])
 
 	return (
 		<div className="flex gap-4">
 			<aside className="w-64 shrink-0 border border-slate-200 rounded-lg bg-white p-3 h-[80vh]">
 				<div className="text-sm font-medium text-slate-800 mb-3">Nodes</div>
 				<div
-					className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move"
+					className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move mb-2"
 					draggable
 					onDragStart={(event) => {
 						event.dataTransfer.setData('application/reactflow', 'inputText')
@@ -70,13 +118,24 @@ function BuilderCanvas() {
 					<div className="text-xs font-medium text-slate-700">Input Node</div>
 					<div className="text-[11px] text-slate-500">Multiple fields</div>
 				</div>
+				<div
+					className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move"
+					draggable
+					onDragStart={(event) => {
+						event.dataTransfer.setData('application/reactflow', 'decision')
+						event.dataTransfer.effectAllowed = 'move'
+					}}
+				>
+					<div className="text-xs font-medium text-slate-700">Decision</div>
+					<div className="text-[11px] text-slate-500">Binary or N-way outcomes</div>
+				</div>
 			</aside>
 			<div className="flex-1 min-w-0 h-[80vh] rounded-lg overflow-hidden border border-slate-200">
 				<ReactFlow
 					nodes={nodes.map(attachEditor)}
 					edges={edges}
 					onNodesChange={onNodesChange}
-					onEdgesChange={onEdgesChange}
+					onEdgesChange={onEdgesChangeWithSchema}
 					onConnect={onConnect}
 					nodeTypes={nodeTypes}
 					onDrop={onDrop}
@@ -90,12 +149,12 @@ function BuilderCanvas() {
 			</div>
 
 			<NodeEditModal
-				isOpen={Boolean(editingNode)}
-				fields={editingNode?.data.base.config.fields ?? []}
-				currentValues={editingNode?.data.value ?? {}}
-				onClose={() => setEditingNodeId(null)}
+				isOpen={Boolean(editingInputNode)}
+				fields={editingInputNode?.data.base.config.fields ?? []}
+				currentValues={editingInputNode?.data.value ?? {}}
+				onClose={() => setEditingInputNodeId(null)}
 				onSave={(updates) => {
-					setNodes((prev) => prev.map(n => n.id === editingNodeId ? {
+					setNodes((prev) => prev.map(n => n.id === editingInputNodeId ? {
 						...n,
 						data: {
 							...n.data,
@@ -105,9 +164,30 @@ function BuilderCanvas() {
 							}
 						}
 					} : n))
-					setEditingNodeId(null)
+					setEditingInputNodeId(null)
 				}}
 			/>
+
+			{editingDecisionNode && (
+				<DecisionNodeEditModal
+					isOpen={Boolean(editingDecisionNode)}
+					node={editingDecisionNode.data.base as DecisionNode}
+					onClose={() => setEditingDecisionNodeId(null)}
+					onSave={(updates) => {
+						setNodes((prev) => prev.map(n => n.id === editingDecisionNodeId ? {
+							...n,
+							data: {
+								...n.data,
+								base: {
+									...n.data.base,
+									config: { ...(n.data.base as DecisionNode).config, decisions: updates.decisions },
+								}
+							}
+						} : n))
+						setEditingDecisionNodeId(null)
+					}}
+				/>
+			)}
 		</div>
 	)
 }

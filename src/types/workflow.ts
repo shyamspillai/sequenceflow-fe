@@ -44,4 +44,41 @@ export type InputTextNodeData = {
 	openEditor?: (nodeId: string) => void
 }
 
-export type WorkflowNode = InputTextNode 
+export type DecisionPredicate = {
+	id: string
+	targetField?: string
+	validationConfig?: import('./validation').AnyValidationConfig
+	validationLogic?: import('json-logic-js').RulesLogic
+}
+
+export type DecisionCondition = {
+	id: string
+	name: string
+	// legacy single-field mode
+	targetField?: string
+	kind?: InputKind
+	validationConfig?: import('./validation').AnyValidationConfig
+	validationLogic?: import('json-logic-js').RulesLogic
+	// new multi-predicate mode
+	predicates?: DecisionPredicate[]
+	combiner?: 'all' | 'any'
+}
+
+export type DecisionNodeConfig = {
+	decisions: DecisionCondition[]
+}
+
+export type DecisionNode = BaseNode<'decision', DecisionNodeConfig> & {
+	// inputSchema should mirror upstream node's output schema when connected
+	inputSchema: JSONSchema
+	outputSchema: JSONSchema
+}
+
+export type DecisionNodeData = {
+	base: DecisionNode
+	sampleInput?: Record<string, unknown>
+	openEditor?: (nodeId: string) => void
+}
+
+export type WorkflowNode = InputTextNode | DecisionNode
+export type WorkflowNodeData = InputTextNodeData | DecisionNodeData 
