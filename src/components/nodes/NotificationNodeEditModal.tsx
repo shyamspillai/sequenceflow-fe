@@ -27,10 +27,35 @@ export default function NotificationNodeEditModal({ isOpen, node, onClose, onSav
 
 	const parsedSample = useMemo(() => { try { return JSON.parse(sample) } catch { return {} } }, [sample])
 
+	// Extract possible fields from the upstream schema (if object)
 	const fieldOptions = useMemo(() => {
 		const props = (node.inputSchema as any)?.properties as Record<string, unknown> | undefined
-		return props ? Object.keys(props) : []
+		if (!props) return []
+		
+		const fields: string[] = []
+		
+		// Add top-level properties
+		for (const [key, value] of Object.entries(props)) {
+			fields.push(key)
+			
+			// If this property is an object with its own properties, add nested fields
+			if (value && typeof value === 'object' && 'properties' in value) {
+				const nestedProps = (value as any).properties as Record<string, unknown> | undefined
+				if (nestedProps) {
+					for (const nestedKey of Object.keys(nestedProps)) {
+						fields.push(`${key}.${nestedKey}`)
+					}
+				}
+			}
+		}
+		
+		return fields
 	}, [node.inputSchema])
+
+	// Check if this notification node is connected to an API Call node
+	const isConnectedToApiCall = useMemo(() => {
+		return fieldOptions.includes('status') && fieldOptions.includes('data') && fieldOptions.includes('success')
+	}, [fieldOptions])
 
 	const preview = useMemo(() => interpolateTemplate(template, parsedSample), [template, parsedSample])
 
@@ -48,24 +73,41 @@ export default function NotificationNodeEditModal({ isOpen, node, onClose, onSav
 						{fieldOptions.length === 0 ? (
 							<div className="text-[11px] text-red-600">No fields available from upstream schema. Connect an input node first.</div>
 						) : (
-							<div className="flex flex-wrap gap-1">
-								{fieldOptions.map(k => (
-									<button key={k} className="px-2 py-0.5 text-[11px] rounded border hover:bg-slate-50" onClick={() => {
-										const el = textareaRef.current
-										if (!el) return
-										const start = el.selectionStart
-										const end = el.selectionEnd
-										const before = template.slice(0, start)
-										const after = template.slice(end)
-										const insertion = `{{ ${k} }}`
-										const next = before + insertion + after
-										setTemplate(next)
-										requestAnimationFrame(() => {
-											el.focus()
-											el.selectionStart = el.selectionEnd = start + insertion.length
-										})
-									}}>{k}</button>
-								))}
+							<div>
+								{isConnectedToApiCall && (
+									<div className="text-[11px] text-blue-600 mb-2">💡 API Call detected: Use any field path in your template!</div>
+								)}
+								<div className="flex flex-wrap gap-1">
+									{fieldOptions.map(k => (
+										<button key={k} className="px-2 py-0.5 text-[11px] rounded border hover:bg-slate-50" onClick={() => {
+											const el = textareaRef.current
+											if (!el) return
+											const start = el.selectionStart
+											const end = el.selectionEnd
+											const before = template.slice(0, start)
+											const after = template.slice(end)
+											const insertion = `{{ ${k} }}`
+											const next = before + insertion + after
+											setTemplate(next)
+											requestAnimationFrame(() => {
+												el.focus()
+												el.selectionStart = el.selectionEnd = start + insertion.length
+											})
+										}}>{k}</button>
+									))}
+								</div>
+								{isConnectedToApiCall && (
+									<div className="mt-2 p-2 bg-blue-50 rounded border text-[10px]">
+										<div className="font-medium text-blue-800 mb-1">Custom field examples:</div>
+										<div className="space-y-1 text-blue-700">
+											<div>{`{{ data.temperature }}`} - API response data</div>
+											<div>{`{{ data.city }}`} - Nested properties</div>
+											<div>{`{{ data.user.name }}`} - Deep nesting</div>
+											<div>{`{{ status }}`} - HTTP status code</div>
+											<div>{`{{ success }}`} - Success boolean</div>
+										</div>
+									</div>
+								)}
 							</div>
 						)}
 					</aside>

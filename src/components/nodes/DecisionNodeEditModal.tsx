@@ -23,8 +23,32 @@ export default function DecisionNodeEditModal({ isOpen, node, onClose, onSave }:
 	// Extract possible fields from the upstream schema (if object)
 	const fieldOptions = useMemo(() => {
 		const props = (node.inputSchema as any)?.properties as Record<string, unknown> | undefined
-		return props ? Object.keys(props) : []
+		if (!props) return []
+		
+		const fields: string[] = []
+		
+		// Add top-level properties
+		for (const [key, value] of Object.entries(props)) {
+			fields.push(key)
+			
+			// If this property is an object with its own properties, add nested fields
+			if (value && typeof value === 'object' && 'properties' in value) {
+				const nestedProps = (value as any).properties as Record<string, unknown> | undefined
+				if (nestedProps) {
+					for (const nestedKey of Object.keys(nestedProps)) {
+						fields.push(`${key}.${nestedKey}`)
+					}
+				}
+			}
+		}
+		
+		return fields
 	}, [node.inputSchema])
+
+	// Check if this decision node is connected to an API Call node
+	const isConnectedToApiCall = useMemo(() => {
+		return fieldOptions.includes('status') && fieldOptions.includes('data') && fieldOptions.includes('success')
+	}, [fieldOptions])
 
 	if (!isOpen) return null
 	return (
@@ -80,6 +104,9 @@ export default function DecisionNodeEditModal({ isOpen, node, onClose, onSave }:
 									{fieldOptions.length === 0 && (
 										<div className="text-[11px] text-red-600 mb-2">No fields available from upstream schema. Connect an input node first.</div>
 									)}
+									{isConnectedToApiCall && (
+										<div className="text-[11px] text-blue-600 mb-2">💡 API Call detected: You can type custom field paths like "data.temperature", "data.user.name", etc.</div>
+									)}
 									<div className="space-y-3">
 										{(selected.predicates ?? []).map((p) => {
 											const tf = p.targetField ?? fieldOptions[0]
@@ -87,20 +114,34 @@ export default function DecisionNodeEditModal({ isOpen, node, onClose, onSave }:
 											return (
 												<div key={p.id} className="rounded border border-slate-200 p-2">
 													<div className="flex items-center gap-2 mb-2">
-														<select className="border rounded px-2 py-1 text-xs" value={tf ?? ''} onChange={(e) => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: (d.predicates ?? []).map(pp => pp.id === p.id ? { ...pp, targetField: e.target.value } : pp) } : d))}>
-															{fieldOptions.map(k => <option key={k} value={k}>{k}</option>)}
-														</select>
+														{isConnectedToApiCall ? (
+															<div className="flex-1">
+																<input 
+																	className="w-full border rounded px-2 py-1 text-xs font-mono" 
+																	placeholder="Field path (e.g., data.temperature, status, success)"
+																	value={tf ?? ''} 
+																	onChange={(e) => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: (d.predicates ?? []).map(pp => pp.id === p.id ? { ...pp, targetField: e.target.value } : pp) } : d))}
+																/>
+																<div className="text-[10px] text-slate-500 mt-1">
+																	Suggested: data.temperature, data.city, status, success
+																</div>
+															</div>
+														) : (
+															<select className="border rounded px-2 py-1 text-xs" value={tf ?? ''} onChange={(e) => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: (d.predicates ?? []).map(pp => pp.id === p.id ? { ...pp, targetField: e.target.value } : pp) } : d))}>
+																{fieldOptions.map(k => <option key={k} value={k}>{k}</option>)}
+															</select>
+														)}
 														<button className="ml-auto text-[11px] text-red-600" onClick={() => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: (d.predicates ?? []).filter(pp => pp.id !== p.id) } : d))}>Remove</button>
 													</div>
 													{tf ? (
 														<RuleBuilder initial={p.validationConfig as AnyValidationConfig} value={valueForRule} onChange={(cfg) => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: (d.predicates ?? []).map(pp => pp.id === p.id ? { ...pp, validationConfig: cfg, validationLogic: compileValidationConfigToJsonLogic(cfg) } : pp) } : d))} />
 													) : (
-														<div className="text-[11px] text-slate-500">Select a field to define rules.</div>
+														<div className="text-[11px] text-slate-500">Enter a field path to define rules.</div>
 													)}
 												</div>
 											)
 										})}
-										<button className="text-xs text-blue-700 disabled:text-slate-400" disabled={fieldOptions.length === 0} onClick={() => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: [ ...(d.predicates ?? []), { id: crypto.randomUUID(), targetField: fieldOptions[0] } as DecisionPredicate ] } : d))}>+ Add predicate</button>
+										<button className="text-xs text-blue-700" onClick={() => setDecisions(prev => prev.map(d => d.id === selected.id ? { ...d, predicates: [ ...(d.predicates ?? []), { id: crypto.randomUUID(), targetField: isConnectedToApiCall ? 'data.' : fieldOptions[0] } as DecisionPredicate ] } : d))}>+ Add predicate</button>
 									</div>
 								</div>
 

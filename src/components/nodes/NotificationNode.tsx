@@ -1,25 +1,9 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo } from 'react'
 import { Handle, Position, type Node as FlowNode, type NodeProps } from '@xyflow/react'
 import type { NotificationNodeData } from '../../types/workflow'
-import { exampleFromSchema } from '../../utils/schema'
-import { interpolateTemplate } from '../../utils/template'
 
 function NotificationNodeComponent({ data }: NodeProps<FlowNode<NotificationNodeData>>) {
 	const { base } = data
-	const [sample, setSample] = useState<Record<string, unknown>>({})
-
-	useEffect(() => {
-		if (base.inputSchema) {
-			const ex = exampleFromSchema(base.inputSchema)
-			if (ex && typeof ex === 'object') setSample(ex as Record<string, unknown>)
-		}
-	}, [base.inputSchema])
-
-	const effectiveInput = useMemo(() => {
-		return (data.inputValue ?? sample) as Record<string, any>
-	}, [data.inputValue, sample])
-
-	const preview = useMemo(() => interpolateTemplate(base.config.template ?? '', effectiveInput), [base.config.template, effectiveInput])
 
 	return (
 		<div className="rounded-md border border-slate-200 bg-white shadow-sm w-[360px]">
@@ -28,9 +12,17 @@ function NotificationNodeComponent({ data }: NodeProps<FlowNode<NotificationNode
 				<button className="text-[11px] text-blue-700" onClick={() => data.openEditor?.(base.id)}>Edit</button>
 			</div>
 			<div className="p-3 space-y-2">
-				<div className="text-[11px] text-slate-500">Notification preview</div>
-				<div className="text-[12px] text-slate-800 whitespace-pre-wrap break-words border rounded p-2 min-h-12">
-					{preview || <span className="text-slate-400">No template</span>}
+				{base.inputSchema && Object.keys(base.inputSchema).length > 0 && (
+					<div className="text-[10px] text-slate-500">
+						Connected to upstream node. Will use input data for template.
+					</div>
+				)}
+				<div className="text-[11px] text-slate-600">Template:</div>
+				<div className="text-[12px] text-slate-800 whitespace-pre-wrap break-words border rounded p-2 min-h-12 bg-slate-50">
+					{base.config.template || <span className="text-slate-400">No template configured</span>}
+				</div>
+				<div className="text-[10px] text-slate-500">
+					Will generate message during workflow execution
 				</div>
 			</div>
 			<Handle type="target" position={Position.Left} id="in" />

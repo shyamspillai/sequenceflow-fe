@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState, useRef } from 'react'
 import { Handle, Position, type Node as FlowNode, type NodeProps } from '@xyflow/react'
 import type { InputTextNodeData, InputFieldConfig } from '../../types/workflow'
 import { applyJsonLogic } from '../../utils/validation/jsonLogic'
@@ -27,6 +27,10 @@ function InputTextNodeComponent({ data }: NodeProps<FlowNode<InputTextNodeData>>
 	}, [base.config.fields])
 	const [values, setValues] = useState<Record<string, string | number>>(data.value ?? initialValues)
 
+	// Use a ref to store the callback to avoid dependency cycles
+	const updateNodeValuesRef = useRef(data.updateNodeValues)
+	updateNodeValuesRef.current = data.updateNodeValues
+
 	const validations = useMemo(() => {
 		const errs: Record<string, string | null> = {}
 		for (const f of base.config.fields ?? []) {
@@ -40,8 +44,10 @@ function InputTextNodeComponent({ data }: NodeProps<FlowNode<InputTextNodeData>>
 	useEffect(() => {
 		data.value = values
 		data.errors = validations
-		// Notify graph about output change
-		data.updateOutput?.(base.id, { ...values })
+		// Report current values to parent component for Run functionality
+		if (updateNodeValuesRef.current) {
+			updateNodeValuesRef.current(base.id, values)
+		}
 	}, [values, validations, base.id])
 
 	const expectedKeys = useMemo(() => (base.config.fields ?? []).map(f => f.key), [base.config.fields])

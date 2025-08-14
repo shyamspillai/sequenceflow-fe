@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { InputTextNodeData, DecisionNode, NotificationNode, WorkflowNodeData } from '../types/workflow'
+import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
 import NotificationNodeEditModal from '../components/nodes/NotificationNodeEditModal'
+import ApiCallNodeEditModal from '../components/nodes/ApiCallNodeEditModal'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowRepository'
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
@@ -20,6 +21,7 @@ function BuilderCanvas() {
 	const [editingInputNodeId, setEditingInputNodeId] = useState<string | null>(null)
 	const [editingDecisionNodeId, setEditingDecisionNodeId] = useState<string | null>(null)
 	const [editingNotificationNodeId, setEditingNotificationNodeId] = useState<string | null>(null)
+	const [editingApiCallNodeId, setEditingApiCallNodeId] = useState<string | null>(null)
 
 	const { id } = useParams()
 	const navigate = useNavigate()
@@ -41,6 +43,8 @@ function BuilderCanvas() {
 					setWorkflowName(wf.name)
 					setWorkflowId(wf.id)
 					setCreatedAt(wf.createdAt)
+					// Clear input node values when loading a workflow
+					setInputNodeValues({})
 				}
 			} else {
 				setNodes([])
@@ -48,6 +52,8 @@ function BuilderCanvas() {
 				setWorkflowName('Untitled Workflow')
 				setWorkflowId(null)
 				setCreatedAt(null)
+				// Clear input node values when creating new workflow
+				setInputNodeValues({})
 			}
 		})()
 		return () => { isMounted = false }
@@ -59,73 +65,31 @@ function BuilderCanvas() {
 		if (n.type === 'inputText') setEditingInputNodeId(nodeId)
 		if (n.type === 'decision') setEditingDecisionNodeId(nodeId)
 		if (n.type === 'notification') setEditingNotificationNodeId(nodeId)
+		if (n.type === 'apiCall') setEditingApiCallNodeId(nodeId)
 	}, [nodes])
 
-	const propagateOutput = useCallback((sourceId: string, output: Record<string, unknown>) => {
-		setNodes((prev) => {
-			const visited = new Set<string>()
-			const affected = new Set<string>()
-			const queue: string[] = [sourceId]
-			while (queue.length > 0) {
-				const cur = queue.shift()!
-				if (visited.has(cur)) continue
-				visited.add(cur)
-				const outs = edges.filter(e => e.source === cur)
-				for (const e of outs) {
-					affected.add(e.target)
-					queue.push(e.target)
-				}
-			}
+	// Store current input values from all input nodes
+	const [inputNodeValues, setInputNodeValues] = useState<Record<string, Record<string, unknown>>>({})
 
-			let changed = false
-			const outputsEqual = (a: any, b: any) => {
-				try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
-			}
-			const next = prev.map(n => {
-				if (n.id === sourceId) {
-					const currentVal = (n.data as any)?.value
-					if (!outputsEqual(currentVal, output)) {
-						changed = true
-						return { ...n, data: { ...n.data, value: output } }
-					}
-					return n
-				}
-				if (!affected.has(n.id)) return n
-				const current = (n.data as any)?.inputValue
-				if (outputsEqual(current, output)) return n
-				changed = true
-				return { ...n, data: { ...n.data, inputValue: output } }
-			})
-			return changed ? next : prev
-		})
-	}, [edges, setNodes])
+	// Callback for input nodes to report their current values
+	const updateInputNodeValues = useCallback((nodeId: string, values: Record<string, unknown>) => {
+		setInputNodeValues(prev => ({ ...prev, [nodeId]: values }))
+	}, [])
 
+	// Remove live data propagation - only attach editor callbacks and value update callback
 	const attachEditor = useCallback((n: FlowNode<any>): FlowNode<any> => ({
 		...n,
-		data: { ...n.data, openEditor, updateOutput: propagateOutput }
-	}), [openEditor, propagateOutput])
+		data: { 
+			...n.data, 
+			openEditor,
+			updateNodeValues: n.type === 'inputText' ? updateInputNodeValues : undefined
+		}
+	}), [openEditor, updateInputNodeValues])
 
 	const onConnect = useCallback((connection: Connection) => {
 		setEdges((eds) => addEdge({ ...connection, animated: true }, eds))
 		setNodes((prev) => applyConnectionEffects(prev as Array<FlowNode<WorkflowNodeData>>, connection))
-		setTimeout(() => {
-			setNodes((prev) => {
-				const src = prev.find(n => n.id === connection.source)
-				if (!src) return prev
-				let output: Record<string, unknown> | null = null
-				if (src.type === 'inputText') {
-					output = (src.data.value as Record<string, unknown>) ?? {}
-				}
-				if (src.type === 'decision') {
-					output = (src.data.inputValue as Record<string, unknown>) ?? {}
-				}
-				if (output) {
-					queueMicrotask(() => propagateOutput(connection.source!, output!))
-				}
-				return prev
-			})
-		}, 0)
-	}, [setEdges, setNodes, propagateOutput])
+	}, [setEdges, setNodes])
 
 	const onEdgesChangeWithSchema = useCallback((changes: any) => {
 		onEdgesChange(changes)
@@ -147,6 +111,7 @@ function BuilderCanvas() {
 	const editingInputNode = useMemo(() => nodes.find(n => n.id === editingInputNodeId) ?? null, [nodes, editingInputNodeId])
 	const editingDecisionNode = useMemo(() => nodes.find(n => n.id === editingDecisionNodeId) ?? null, [nodes, editingDecisionNodeId])
 	const editingNotificationNode = useMemo(() => nodes.find(n => n.id === editingNotificationNodeId) ?? null, [nodes, editingNotificationNodeId])
+	const editingApiCallNode = useMemo(() => nodes.find(n => n.id === editingApiCallNodeId) ?? null, [nodes, editingApiCallNodeId])
 
 	async function handleSave() {
 		const check = validateWorkflowForSave(nodes as Array<FlowNode<WorkflowNodeData>>, edges)
@@ -170,8 +135,19 @@ function BuilderCanvas() {
 	async function handleRun() {
 		const payload = toPersistedWorkflow(nodes as Array<FlowNode<WorkflowNodeData>>, edges)
 		const wf = { id: workflowId ?? 'temp', name: workflowName, ...payload, createdAt: Date.now(), updatedAt: Date.now() }
-		const inputNode = (nodes as Array<FlowNode<WorkflowNodeData>>).find(n => n.type === 'inputText') as FlowNode<InputTextNodeData> | undefined
-		const initial = (inputNode?.data?.value as Record<string, unknown>) ?? {}
+		
+		// Extract input values from stored input node values
+		const initial: Record<string, unknown> = {}
+		
+		// Get all input nodes and their current field values
+		const inputNodes = nodes.filter(n => n.type === 'inputText') as Array<FlowNode<InputTextNodeData>>
+		
+		for (const inputNode of inputNodes) {
+			const nodeValues = inputNodeValues[inputNode.id] || {}
+			// Merge all input node values into the initial payload
+			Object.assign(initial, nodeValues)
+		}
+		
 		const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL
 		if (beBase && workflowId) {
 			const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute`, {
@@ -297,6 +273,27 @@ function BuilderCanvas() {
 							}
 						} : n))
 						setEditingNotificationNodeId(null)
+					}}
+				/>
+			)}
+
+			{editingApiCallNode && (
+				<ApiCallNodeEditModal
+					isOpen={Boolean(editingApiCallNode)}
+					node={editingApiCallNode.data.base as ApiCallNode}
+					onClose={() => setEditingApiCallNodeId(null)}
+					onSave={(updates) => {
+						setNodes((prev) => prev.map(n => n.id === editingApiCallNodeId ? {
+							...n,
+							data: {
+								...n.data,
+								base: {
+									...n.data.base,
+									config: { ...(n.data.base as ApiCallNode).config, ...updates },
+								},
+							}
+						} : n))
+						setEditingApiCallNodeId(null)
 					}}
 				/>
 			)}

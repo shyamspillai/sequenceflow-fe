@@ -43,6 +43,7 @@ export type InputTextNodeData = {
 	errors?: Record<string, string | null>
 	openEditor?: (nodeId: string) => void
 	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
+	updateNodeValues?: (nodeId: string, values: Record<string, unknown>) => void
 }
 
 export type DecisionPredicate = {
@@ -100,5 +101,79 @@ export type NotificationNodeData = {
 	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
-export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode
-export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData 
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+
+export type HttpHeader = {
+	id: string
+	key: string
+	value: string
+	enabled: boolean
+}
+
+export type ApiRequestTemplate = {
+	id: string
+	name: string
+	description?: string
+	category?: string
+	method: HttpMethod
+	url: string
+	headers: HttpHeader[]
+	bodyTemplate?: string
+	expectedStatusCodes?: number[]
+	tags?: string[]
+}
+
+export type ApiCallNodeConfig = {
+	// API request configuration
+	method: HttpMethod
+	url: string
+	headers: HttpHeader[]
+	bodyTemplate?: string // Template string that can use input data
+	timeoutMs?: number
+	retryCount?: number
+	expectedStatusCodes?: number[] // Expected success status codes (default: [200, 201, 202, 204])
+	
+	// Future: API library template reference
+	templateId?: string // Reference to a predefined API template
+	libraryTemplate?: ApiRequestTemplate // Embedded template data
+	
+	// Authentication (future extensibility)
+	authType?: 'none' | 'bearer' | 'basic' | 'apikey' | 'oauth'
+	authConfig?: Record<string, unknown>
+}
+
+export type ApiCallNode = BaseNode<'apiCall', ApiCallNodeConfig> & {
+	inputSchema: JSONSchema
+	outputSchema: {
+		type: 'object'
+		properties: {
+			status: { type: 'number' }
+			statusText: { type: 'string' }
+			data: { 
+				type: 'object'
+				properties?: Record<string, { type: string }>
+			}
+			headers: { type: 'object' }
+			success: { type: 'boolean' }
+			error?: { type: 'string' }
+		}
+	}
+}
+
+export type ApiCallNodeData = {
+	base: ApiCallNode
+	inputValue?: Record<string, unknown>
+	responsePreview?: {
+		status?: number
+		statusText?: string
+		data?: unknown
+		headers?: Record<string, string>
+		success?: boolean
+		error?: string
+	}
+	openEditor?: (nodeId: string) => void
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
+}
+
+export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode | ApiCallNode
+export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData | ApiCallNodeData 

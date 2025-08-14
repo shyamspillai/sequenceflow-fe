@@ -2,6 +2,7 @@ import { type Node as FlowNode, type XYPosition, type Connection } from '@xyflow
 import InputTextNodeComponent from '../../components/nodes/InputTextNode'
 import DecisionNodeComponent from '../../components/nodes/DecisionNode'
 import NotificationNodeComponent from '../../components/nodes/NotificationNode'
+import ApiCallNodeComponent from '../../components/nodes/ApiCallNode'
 import type {
 	WorkflowNodeData,
 	WorkflowNode,
@@ -9,10 +10,12 @@ import type {
 	InputTextNode,
 	DecisionNode,
 	NotificationNode,
+	ApiCallNode,
+	HttpMethod,
 } from '../../types/workflow'
 import { inputFieldsToJsonSchema } from '../schema'
 import { applyJsonLogic } from '../validation/jsonLogic'
-import { interpolateTemplate } from '../template'
+import { interpolateTemplate, getByPath } from '../template'
 
 export type PaletteItem = { type: string; label: string; description?: string }
 
@@ -24,7 +27,7 @@ export type NodeDefinition = {
 	dataFromBase(base: WorkflowNode): WorkflowNodeData
 	applyConnectionEffect?: (source: WorkflowNodeData, target: WorkflowNodeData) => WorkflowNodeData
 	execute?: (base: WorkflowNode, payload: Record<string, unknown>) => {
-		logs: Array<{ kind: 'notification' | 'input' | 'decision'; nodeId: string; name: string; content: string }>
+		logs: Array<{ kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error'; nodeId: string; name: string; content: string }>
 		allowedSourceHandles?: Set<string>
 		payload?: Record<string, unknown>
 	}
@@ -80,9 +83,9 @@ function makeDecisionDef(): NodeDefinition {
 		},
 		dataFromBase(base: WorkflowNode): WorkflowNodeData { return { base: base as DecisionNode, sampleInput: {} } as any },
 		applyConnectionEffect(source, target) {
-			if ((source.base as any).type !== 'decision') return target
-			const srcSchema = (source.base as DecisionNode).inputSchema
-			return { ...target, base: { ...target.base, inputSchema: srcSchema } as any }
+			if ((target.base as any).type !== 'decision') return target
+			const sourceSchema = (source.base as any).outputSchema || (source.base as any).inputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema } as any }
 		},
 		execute(base, payload) {
 			const cfg: any = (base as any).config ?? {}
@@ -90,12 +93,12 @@ function makeDecisionDef(): NodeDefinition {
 			const matches = new Set<string>()
 			for (const d of decisions) {
 				if (Array.isArray(d?.predicates) && d.predicates.length > 0) {
-					const checks = d.predicates.map((p: any) => applyJsonLogic(p.validationLogic, { value: p.targetField ? (payload as any)[p.targetField] : payload }).isValid)
+					const checks = d.predicates.map((p: any) => applyJsonLogic(p.validationLogic, { value: p.targetField ? getByPath(payload, p.targetField) : payload }).isValid)
 					const combiner = (d.combiner ?? 'all') as 'all' | 'any'
 					const valid = combiner === 'all' ? checks.every(Boolean) : checks.some(Boolean)
 					if (valid) matches.add(d.id)
 				} else {
-					const subject = d?.targetField ? (payload as any)[d.targetField] : payload
+					const subject = d?.targetField ? getByPath(payload, d.targetField) : payload
 					const res = applyJsonLogic(d?.validationLogic, { value: subject })
 					if (res.isValid) matches.add(d.id)
 				}
@@ -126,7 +129,11 @@ function makeNotificationDef(): NodeDefinition {
 			}
 		},
 		dataFromBase(base: WorkflowNode): WorkflowNodeData { return { base: base as NotificationNode, previewText: '' } as any },
-		applyConnectionEffect() { return arguments[1] as any },
+		applyConnectionEffect(source, target) {
+			if ((target.base as any).type !== 'notification') return target
+			const sourceSchema = (source.base as any).outputSchema || (source.base as any).inputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema } as any }
+		},
 		execute(base, payload) {
 			const content = interpolateTemplate(((base as any).config ?? {}).template ?? '', payload as any)
 			return { logs: [{ kind: 'notification', nodeId: (base as any).id, name: (base as any).name, content }] }
@@ -134,7 +141,91 @@ function makeNotificationDef(): NodeDefinition {
 	}
 }
 
-const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeNotificationDef()]
+function makeApiCallDef(): NodeDefinition {
+	return {
+		type: 'apiCall',
+		palette: { type: 'apiCall', label: 'API Call', description: 'HTTP request to external service' },
+		reactFlowComponent: ApiCallNodeComponent,
+		createBase(): WorkflowNode {
+			return {
+				id: crypto.randomUUID(),
+				type: 'apiCall',
+				name: 'API Call',
+				inputSchema: {},
+				outputSchema: {
+					type: 'object',
+					properties: {
+						status: { type: 'number' },
+						statusText: { type: 'string' },
+						data: { 
+							type: 'object',
+							properties: {
+								// Common fields that might be in API responses
+								id: { type: 'string' },
+								name: { type: 'string' },
+								city: { type: 'string' },
+								temperature: { type: 'number' },
+								condition: { type: 'string' },
+								humidity: { type: 'number' },
+								timestamp: { type: 'string' },
+								message: { type: 'string' },
+								value: { type: 'string' },
+								count: { type: 'number' },
+								result: { type: 'string' }
+							}
+						},
+						headers: { type: 'object' },
+						success: { type: 'boolean' },
+						error: { type: 'string' }
+					}
+				},
+				config: {
+					method: 'GET' as HttpMethod,
+					url: 'https://api.example.com/endpoint',
+					headers: [],
+					timeoutMs: 10000,
+					expectedStatusCodes: [200, 201, 202, 204]
+				},
+				validationLogic: undefined,
+				connections: [],
+			}
+		},
+		dataFromBase(base: WorkflowNode): WorkflowNodeData { 
+			return { 
+				base: base as ApiCallNode, 
+				responsePreview: undefined 
+			} as any 
+		},
+		applyConnectionEffect(source, target) {
+			// API Call accepts any input schema for templating
+			if ((target.base as any).type !== 'apiCall') return target
+			const sourceSchema = (source.base as any).outputSchema || (source.base as any).inputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema } as any }
+		},
+		execute(base, payload) {
+			// Frontend execution simulation (actual HTTP calls happen on backend)
+			const apiBase = base as ApiCallNode
+			const url = interpolateTemplate(apiBase.config.url, payload as any)
+			return { 
+				logs: [{ 
+					kind: 'api' as const, 
+					nodeId: (base as any).id, 
+					name: (base as any).name, 
+					content: `API Call: ${apiBase.config.method} ${url} (simulated)` 
+				}],
+				payload: {
+					status: 200,
+					statusText: 'OK',
+					data: { simulated: true, input: payload },
+					headers: {},
+					success: true
+				}
+			}
+		},
+	}
+}
+
+const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeNotificationDef(), makeApiCallDef()]
 
 export function getReactFlowNodeTypes(): Record<string, React.ComponentType<any>> {
 	const map: Record<string, React.ComponentType<any>> = {}
@@ -171,7 +262,7 @@ export function applyConnectionEffects(prev: Array<FlowNode<WorkflowNodeData>>, 
 	return prev.map(n => n.id === targetNode.id ? { ...n, data: updated! } : n)
 }
 
-export type ExecutionLog = { kind: 'notification' | 'input' | 'decision'; nodeId: string; name: string; content: string }
+export type ExecutionLog = { kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error'; nodeId: string; name: string; content: string }
 
 export function executeNodeByType(type: string, base: WorkflowNode, payload: Record<string, unknown>): { logs: ExecutionLog[]; allowedSourceHandles?: Set<string>; payload?: Record<string, unknown> } {
 	const def = registry.find(r => r.type === type)
