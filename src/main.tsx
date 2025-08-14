@@ -25,6 +25,7 @@ const router = createBrowserRouter(
 			<Route element={<AppLayout />}>
 				<Route path="/sequences" element={<Sequences />} />
 				<Route path="/sequences/new" element={<SequenceBuilder />} />
+				<Route path="/sequences/:id" element={<SequenceBuilder />} />
 				<Route path="/triggers" element={<Triggers />} />
 				<Route path="/usage" element={<Usage />} />
 				<Route path="/logout" element={<Logout />} />
