@@ -1,5 +1,6 @@
 import type { WorkflowRepository } from './WorkflowRepository'
 import type { PersistedWorkflow, WorkflowSummary } from '../../types/persistence'
+import { getHttpRepository } from './HttpWorkflowRepository'
 
 const STORAGE_KEY = 'sequence-flow.workflows.v1'
 
@@ -65,5 +66,7 @@ export class LocalStorageWorkflowRepository implements WorkflowRepository {
 }
 
 export function getDefaultRepository(): WorkflowRepository {
+	const base = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (globalThis as any)?.SEQUENCE_BE_BASE_URL
+	if (base) return getHttpRepository()
 	return new LocalStorageWorkflowRepository()
 } 

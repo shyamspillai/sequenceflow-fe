@@ -37,6 +37,13 @@ export default function Sequences() {
 							<button className="px-2 py-1 rounded border" onClick={async () => {
 								const wf = await repo.get(seq.id)
 								if (!wf) return
+								const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL
+								if (beBase) {
+									const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(seq.id)}/execute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+									const data = await res.json()
+									alert(JSON.stringify(data.logs, null, 2))
+									return
+								}
 								const res = executeWorkflow(wf)
 								alert(JSON.stringify(res.logs, null, 2))
 							}}>Run</button>

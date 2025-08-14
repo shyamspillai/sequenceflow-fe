@@ -241,9 +241,19 @@ function BuilderCanvas() {
 	async function handleRun() {
 		const payload = toPersistedWorkflow(nodes as Array<FlowNode<WorkflowNodeData>>, edges)
 		const wf = { id: workflowId ?? 'temp', name: workflowName, ...payload, createdAt: Date.now(), updatedAt: Date.now() }
-		// Use current input node values if available
 		const inputNode = (nodes as Array<FlowNode<WorkflowNodeData>>).find(n => n.type === 'inputText') as FlowNode<InputTextNodeData> | undefined
 		const initial = inputNode?.data?.value as Record<string, unknown> | undefined
+		const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL
+		if (beBase && workflowId) {
+			const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ input: initial ?? {} }),
+			})
+			const data = await res.json()
+			setRunOutput(JSON.stringify(data.logs, null, 2))
+			return
+		}
 		const res = executeWorkflow(wf, initial)
 		setRunOutput(JSON.stringify(res.logs, null, 2))
 	}
