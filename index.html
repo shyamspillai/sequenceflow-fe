@@ -8,7 +8,13 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>window.SEQUENCE_BE_BASE_URL = 'http://localhost:3000'</script>
+    <script>
+      // Environment-specific API base URL configuration
+      // This will be overridden by environment variables in production
+      window.SEQUENCE_BE_BASE_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3000' 
+        : (window.VITE_SEQUENCE_BE_BASE_URL || 'backendurl.com.remove.me')
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
