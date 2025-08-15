@@ -175,5 +175,23 @@ export type ApiCallNodeData = {
 	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
-export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode | ApiCallNode
-export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData | ApiCallNodeData 
+export type DelayType = 'seconds' | 'minutes' | 'hours' | 'days'
+
+export type DelayNodeConfig = {
+	delayType: DelayType
+	delayValue: number
+}
+
+export type DelayNode = BaseNode<'delay', DelayNodeConfig> & {
+	inputSchema: JSONSchema
+	outputSchema: JSONSchema
+}
+
+export type DelayNodeData = {
+	base: DelayNode
+	openEditor?: (nodeId: string) => void
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
+}
+
+export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode | ApiCallNode | DelayNode
+export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData | ApiCallNodeData | DelayNodeData 

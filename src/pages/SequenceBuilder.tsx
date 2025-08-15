@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, WorkflowNodeData } from '../types/workflow'
+import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
 import NotificationNodeEditModal from '../components/nodes/NotificationNodeEditModal'
 import ApiCallNodeEditModal from '../components/nodes/ApiCallNodeEditModal'
+import DelayNodeEditModal from '../components/nodes/DelayNodeEditModal'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowRepository'
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
@@ -22,6 +23,7 @@ function BuilderCanvas() {
 	const [editingDecisionNodeId, setEditingDecisionNodeId] = useState<string | null>(null)
 	const [editingNotificationNodeId, setEditingNotificationNodeId] = useState<string | null>(null)
 	const [editingApiCallNodeId, setEditingApiCallNodeId] = useState<string | null>(null)
+	const [editingDelayNodeId, setEditingDelayNodeId] = useState<string | null>(null)
 
 	const { id } = useParams()
 	const navigate = useNavigate()
@@ -79,6 +81,7 @@ function BuilderCanvas() {
 		if (n.type === 'decision') setEditingDecisionNodeId(nodeId)
 		if (n.type === 'notification') setEditingNotificationNodeId(nodeId)
 		if (n.type === 'apiCall') setEditingApiCallNodeId(nodeId)
+		if (n.type === 'delay') setEditingDelayNodeId(nodeId)
 	}, [nodes])
 
 	// Store current input values from all input nodes
@@ -125,6 +128,7 @@ function BuilderCanvas() {
 	const editingDecisionNode = useMemo(() => nodes.find(n => n.id === editingDecisionNodeId) ?? null, [nodes, editingDecisionNodeId])
 	const editingNotificationNode = useMemo(() => nodes.find(n => n.id === editingNotificationNodeId) ?? null, [nodes, editingNotificationNodeId])
 	const editingApiCallNode = useMemo(() => nodes.find(n => n.id === editingApiCallNodeId) ?? null, [nodes, editingApiCallNodeId])
+	const editingDelayNode = useMemo(() => nodes.find(n => n.id === editingDelayNodeId) ?? null, [nodes, editingDelayNodeId])
 
 	async function handleSave() {
 		const check = validateWorkflowForSave(nodes as Array<FlowNode<WorkflowNodeData>>, edges)
@@ -442,6 +446,31 @@ function BuilderCanvas() {
 							}
 						} : n))
 						setEditingApiCallNodeId(null)
+					}}
+				/>
+			)}
+
+			{editingDelayNode && (
+				<DelayNodeEditModal
+					isOpen={Boolean(editingDelayNode)}
+					node={editingDelayNode.data.base as DelayNode}
+					onClose={() => setEditingDelayNodeId(null)}
+					onSave={(updates) => {
+						setNodes((prev) => prev.map(n => n.id === editingDelayNodeId ? {
+							...n,
+							data: {
+								...n.data,
+								base: {
+									...n.data.base,
+									name: updates.name || n.data.base.name,
+									config: {
+										...(n.data.base as DelayNode).config,
+										...updates.config,
+									},
+								},
+							}
+						} : n))
+						setEditingDelayNodeId(null)
 					}}
 				/>
 			)}

@@ -3,6 +3,7 @@ import InputTextNodeComponent from '../../components/nodes/InputTextNode'
 import DecisionNodeComponent from '../../components/nodes/DecisionNode'
 import NotificationNodeComponent from '../../components/nodes/NotificationNode'
 import ApiCallNodeComponent from '../../components/nodes/ApiCallNode'
+import DelayNodeComponent from '../../components/nodes/DelayNode'
 import type {
 	WorkflowNodeData,
 	WorkflowNode,
@@ -11,6 +12,7 @@ import type {
 	DecisionNode,
 	NotificationNode,
 	ApiCallNode,
+	DelayNode,
 	HttpMethod,
 } from '../../types/workflow'
 import { inputFieldsToJsonSchema } from '../schema'
@@ -27,7 +29,7 @@ export type NodeDefinition = {
 	dataFromBase(base: WorkflowNode): WorkflowNodeData
 	applyConnectionEffect?: (source: WorkflowNodeData, target: WorkflowNodeData) => WorkflowNodeData
 	execute?: (base: WorkflowNode, payload: Record<string, unknown>) => {
-		logs: Array<{ kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error'; nodeId: string; name: string; content: string }>
+		logs: Array<{ kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error' | 'delay'; nodeId: string; name: string; content: string }>
 		allowedSourceHandles?: Set<string>
 		payload?: Record<string, unknown>
 	}
@@ -225,7 +227,53 @@ function makeApiCallDef(): NodeDefinition {
 	}
 }
 
-const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeNotificationDef(), makeApiCallDef()]
+function makeDelayDef(): NodeDefinition {
+	return {
+		type: 'delay',
+		palette: { type: 'delay', label: 'Delay', description: 'Wait for a specified duration' },
+		reactFlowComponent: DelayNodeComponent,
+		createBase(): WorkflowNode {
+			return {
+				id: crypto.randomUUID(),
+				type: 'delay',
+				name: 'Delay',
+				inputSchema: {},
+				outputSchema: {},
+				config: { 
+					delayType: 'seconds',
+					delayValue: 5
+				},
+				validationLogic: undefined,
+				connections: [],
+			}
+		},
+		dataFromBase(base: WorkflowNode): WorkflowNodeData { return { base: base as DelayNode } as any },
+		applyConnectionEffect(source, target) {
+			if ((target.base as any).type !== 'delay') return target
+			const sourceSchema = (source.base as any).outputSchema || (source.base as any).inputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema, outputSchema: sourceSchema } as any }
+		},
+		execute(base, payload) {
+			const delayBase = base as DelayNode
+			const { delayType, delayValue } = delayBase.config
+			
+			// Format delay for display
+			const formatDelay = (type: string, value: number): string => {
+				if (value === 1) {
+					return `1 ${type.slice(0, -1)}`
+				}
+				return `${value} ${type}`
+			}
+			
+			return {
+				logs: [{ kind: 'delay', nodeId: (base as any).id, name: (base as any).name, content: `Delay scheduled: ${formatDelay(delayType, delayValue)}` }],
+				payload
+			}
+		},
+	}
+}
+
+const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeNotificationDef(), makeApiCallDef(), makeDelayDef()]
 
 export function getReactFlowNodeTypes(): Record<string, React.ComponentType<any>> {
 	const map: Record<string, React.ComponentType<any>> = {}
@@ -262,7 +310,7 @@ export function applyConnectionEffects(prev: Array<FlowNode<WorkflowNodeData>>, 
 	return prev.map(n => n.id === targetNode.id ? { ...n, data: updated! } : n)
 }
 
-export type ExecutionLog = { kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error'; nodeId: string; name: string; content: string }
+export type ExecutionLog = { kind: 'notification' | 'input' | 'decision' | 'api' | 'api-error' | 'delay'; nodeId: string; name: string; content: string }
 
 export function executeNodeByType(type: string, base: WorkflowNode, payload: Record<string, unknown>): { logs: ExecutionLog[]; allowedSourceHandles?: Set<string>; payload?: Record<string, unknown> } {
 	const def = registry.find(r => r.type === type)
