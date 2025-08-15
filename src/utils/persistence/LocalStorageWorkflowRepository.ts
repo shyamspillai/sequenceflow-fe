@@ -112,6 +112,52 @@ export class LocalStorageWorkflowRepository implements WorkflowRepository {
 		const { workflowId, ...rest } = run
 		return rest
 	}
+
+	// New async methods for compatibility
+	async executeAsync(id: string, input?: Record<string, unknown>): Promise<{ runId: string }> {
+		// For local storage, we'll execute immediately and return the runId
+		const result = await this.execute(id, input)
+		return { runId: result.runId }
+	}
+
+	async getRunStatus(workflowId: string, runId: string): Promise<{
+		status: string
+		startedAt: string
+		finishedAt?: string | null
+		tasks: Array<{
+			id: string
+			nodeId: string
+			nodeType: string
+			status: string
+			startedAt?: string | null
+			completedAt?: string | null
+			error?: string | null
+		}>
+		logs: Array<{
+			id: string
+			type: string
+			message: string
+			timestamp: string
+			nodeId?: string | null
+		}>
+	}> {
+		const run = readRuns().find(r => r.workflowId === workflowId && r.id === runId)
+		if (!run) throw new Error('Run not found')
+		
+		return {
+			status: run.status,
+			startedAt: new Date(run.startedAt).toISOString(),
+			finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
+			tasks: [], // Local storage doesn't track individual tasks
+			logs: run.logs.map(log => ({
+				id: log.id,
+				type: log.type,
+				message: log.message,
+				timestamp: new Date(log.timestamp).toISOString(),
+				nodeId: log.nodePersistedId || null
+			}))
+		}
+	}
 }
 
 export function getDefaultRepository(): WorkflowRepository {

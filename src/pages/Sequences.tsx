@@ -1,16 +1,28 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowRepository'
+import { getHttpRepository } from '../utils/persistence/HttpWorkflowRepository'
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
 import type { WorkflowSummary, WorkflowRunDetail, WorkflowRunSummary, PersistedWorkflow, PersistedNode } from '../types/persistence'
 
 export default function Sequences() {
-	const repo: WorkflowRepository = useMemo(() => getDefaultRepository(), [])
+	// Force HTTP repository when backend is available
+	const repo: WorkflowRepository = useMemo(() => {
+		// Check multiple possible environment variable sources
+		const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || 
+					  (window as any)?.SEQUENCE_BE_BASE_URL ||
+					  'http://localhost:3000' // Default to localhost:3000 for development
+		
+		console.log('Backend base URL detected:', beBase)
+		console.log('Using HTTP repository for Sequences page')
+		return getHttpRepository()
+	}, [])
 	const [items, setItems] = useState<WorkflowSummary[]>([])
 	const [runsByWorkflow, setRunsByWorkflow] = useState<Record<string, WorkflowRunSummary[]>>({})
-	const [logsModal, setLogsModal] = useState<{ workflowId: string; run?: WorkflowRunDetail } | null>(null)
-	const [loadingRun, setLoadingRun] = useState<boolean>(false)
-	const [runForm, setRunForm] = useState<{ workflowId: string; fields: Array<{ nodeId: string; key: string; label: string }>; values: Record<string, any> } | null>(null)
+	const [runForm, setRunForm] = useState<{ workflowId: string; fields: Array<{ nodeId: string; key: string; label: string }>; values: Record<string, string> } | null>(null)
+	const [logsModal, setLogsModal] = useState<{ workflowId: string; run: WorkflowRunDetail } | null>(null)
+	const [loadingRun, setLoadingRun] = useState(false)
+	const [pollingTimeouts, setPollingTimeouts] = useState<Record<string, number>>({})
 	const navigate = useNavigate()
 
 	async function load() {
@@ -48,12 +60,105 @@ export default function Sequences() {
 				const detail = await (repo.getRun?.(workflowId, runs[0].id) as Promise<WorkflowRunDetail>)
 				setLogsModal({ workflowId, run: detail })
 			} else {
-				setLogsModal({ workflowId, run: undefined })
+				setLogsModal(null)
 			}
 		} finally {
 			setLoadingRun(false)
 		}
 	}
+
+	// Real-time polling function for workflow runs
+	const startRealTimePolling = (workflowId: string, runId: string) => {
+		console.log('Starting real-time polling for:', { workflowId, runId })
+		console.log('Current logsModal:', logsModal)
+		console.log('repo.getRunStatus available:', !!repo.getRunStatus)
+		
+		let pollCount = 0
+		const maxPolls = 150 // 5 minutes max
+		
+		const poll = async () => {
+			try {
+				console.log(`Poll attempt ${pollCount + 1} for run ${runId}`)
+				if (repo.getRunStatus) {
+					console.log('Calling getRunStatus...')
+					const status = await repo.getRunStatus(workflowId, runId)
+					console.log('Got status:', status)
+					
+					// Always update the modal if we're polling this run
+					// Use functional state update to get current modal state
+					setLogsModal(currentModal => {
+						// Only update if the modal is showing this specific run
+						if (currentModal && currentModal.run.id === runId) {
+							console.log('Updating logs modal with new status')
+							const updatedRun: WorkflowRunDetail = {
+								id: runId,
+								status: status.status as any,
+								startedAt: new Date(status.startedAt).getTime(),
+								finishedAt: status.finishedAt ? new Date(status.finishedAt).getTime() : undefined,
+								logs: status.logs.map(log => ({
+									id: log.id,
+									type: log.type as any,
+									message: log.message,
+									timestamp: new Date(log.timestamp).getTime(),
+									nodePersistedId: log.nodeId || undefined,
+									data: undefined
+								}))
+							}
+							
+							return { workflowId, run: updatedRun }
+						} else {
+							console.log('Modal not showing this run or no modal, not updating')
+							return currentModal
+						}
+					})
+					
+					// Stop polling if workflow is complete
+					if (status.status === 'succeeded' || status.status === 'failed') {
+						console.log('Workflow completed with status:', status.status)
+						// Clear timeout
+						if (pollingTimeouts[runId]) {
+							clearTimeout(pollingTimeouts[runId])
+							setPollingTimeouts(prev => {
+								const newTimeouts = { ...prev }
+								delete newTimeouts[runId]
+								return newTimeouts
+							})
+						}
+						return
+					}
+					
+					// Continue polling
+					pollCount++
+					if (pollCount < maxPolls) {
+						console.log('Scheduling next poll in 2 seconds...')
+						const timeoutId = setTimeout(poll, 2000)
+						setPollingTimeouts(prev => ({ ...prev, [runId]: timeoutId }))
+					} else {
+						console.log('Max polls reached, stopping polling')
+					}
+				} else {
+					console.error('repo.getRunStatus is not available')
+				}
+			} catch (error) {
+				console.error('Polling error:', error)
+				pollCount++
+				if (pollCount < maxPolls) {
+					const timeoutId = setTimeout(poll, 2000)
+					setPollingTimeouts(prev => ({ ...prev, [runId]: timeoutId }))
+				}
+			}
+		}
+		
+		// Start polling immediately
+		poll()
+	}
+
+	// Cleanup polling on unmount
+	useEffect(() => {
+		return () => {
+			Object.values(pollingTimeouts).forEach(timeoutId => clearTimeout(timeoutId))
+		}
+	}, [pollingTimeouts])
 
 	useEffect(() => { load() }, [])
 
@@ -104,13 +209,48 @@ export default function Sequences() {
 								<button className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm" onClick={async () => {
 									setLoadingRun(true)
 									try {
-										const data = await repo.execute(runForm.workflowId, runForm.values)
-										// refresh runs and open logs for this run
-										const runs = await (repo.listRuns?.(runForm.workflowId) ?? Promise.resolve([]))
-										setRunsByWorkflow(prev => ({ ...prev, [runForm.workflowId]: runs }))
-										const detail = await (repo.getRun?.(runForm.workflowId, data.runId) as Promise<WorkflowRunDetail>)
-										setRunForm(null)
-										setLogsModal({ workflowId: runForm.workflowId, run: detail })
+										// Use new async execution method if available
+										if (repo.executeAsync) {
+											const data = await repo.executeAsync(runForm.workflowId, runForm.values)
+											// refresh runs and immediately show the run (even if still running)
+											const runs = await (repo.listRuns?.(runForm.workflowId) ?? Promise.resolve([]))
+											setRunsByWorkflow(prev => ({ ...prev, [runForm.workflowId]: runs }))
+											
+											// Create a mock detail for the new run to show it's running
+											const mockDetail: WorkflowRunDetail = {
+												id: data.runId,
+												status: 'running',
+												startedAt: Date.now(),
+												finishedAt: undefined,
+												logs: [
+													{
+														id: 'initial',
+														type: 'system',
+														message: '🚀 Workflow execution started - polling for real-time updates...',
+														timestamp: Date.now(),
+														nodePersistedId: undefined,
+														data: undefined
+													}
+												]
+											}
+											
+											setRunForm(null)
+											// Set the modal BEFORE starting polling
+											setLogsModal({ workflowId: runForm.workflowId, run: mockDetail })
+											
+											// Use setTimeout to ensure state update completes before polling starts
+											setTimeout(() => {
+												startRealTimePolling(runForm.workflowId, data.runId)
+											}, 100)
+										} else {
+											// Fallback to old method
+											const data = await repo.execute(runForm.workflowId, runForm.values)
+											const runs = await (repo.listRuns?.(runForm.workflowId) ?? Promise.resolve([]))
+											setRunsByWorkflow(prev => ({ ...prev, [runForm.workflowId]: runs }))
+											const detail = await (repo.getRun?.(runForm.workflowId, data.runId) as Promise<WorkflowRunDetail>)
+											setRunForm(null)
+											setLogsModal({ workflowId: runForm.workflowId, run: detail })
+										}
 									} finally {
 										setLoadingRun(false)
 									}

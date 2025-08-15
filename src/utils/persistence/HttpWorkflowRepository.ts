@@ -94,6 +94,39 @@ export class HttpWorkflowRepository implements WorkflowRepository {
 		throw new Error(`Workflow execution timed out after ${maxAttempts} seconds`)
 	}
 
+	// New method: Start async execution and return runId immediately
+	async executeAsync(id: string, input?: Record<string, unknown>): Promise<{ runId: string }> {
+		return http<{ runId: string }>(`/workflows/${encodeURIComponent(id)}/execute-async`, { 
+			method: 'POST', 
+			body: JSON.stringify({ input }) 
+		})
+	}
+
+	// New method: Get current status of a workflow run
+	async getRunStatus(workflowId: string, runId: string): Promise<{
+		status: string
+		startedAt: string
+		finishedAt?: string | null
+		tasks: Array<{
+			id: string
+			nodeId: string
+			nodeType: string
+			status: string
+			startedAt?: string | null
+			completedAt?: string | null
+			error?: string | null
+		}>
+		logs: Array<{
+			id: string
+			type: string
+			message: string
+			timestamp: string
+			nodeId?: string | null
+		}>
+	}> {
+		return http(`/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/status`)
+	}
+
 	async listRuns(id: string): Promise<WorkflowRunSummary[]> {
 		return http<WorkflowRunSummary[]>(`/workflows/${encodeURIComponent(id)}/runs`)
 	}

@@ -30,6 +30,10 @@ function BuilderCanvas() {
 	const [workflowId, setWorkflowId] = useState<string | null>(null)
 	const [createdAt, setCreatedAt] = useState<number | null>(null)
 	const [runOutput, setRunOutput] = useState<string>('')
+	const [isRunning, setIsRunning] = useState<boolean>(false)
+	const [currentRunId, setCurrentRunId] = useState<string | null>(null)
+	const [runStatus, setRunStatus] = useState<string>('')
+	const [pollTimeoutId, setPollTimeoutId] = useState<number | null>(null)
 
 	useEffect(() => {
 		let isMounted = true
@@ -58,6 +62,15 @@ function BuilderCanvas() {
 		})()
 		return () => { isMounted = false }
 	}, [id, repo, setNodes, setEdges])
+
+	// Cleanup polling on unmount
+	useEffect(() => {
+		return () => {
+			if (pollTimeoutId) {
+				clearTimeout(pollTimeoutId)
+			}
+		}
+	}, [pollTimeoutId])
 
 	const openEditor = useCallback((nodeId: string) => {
 		const n = nodes.find(n => n.id === nodeId)
@@ -150,42 +163,131 @@ function BuilderCanvas() {
 		
 		const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL
 		if (beBase && workflowId) {
-			// Use async execution endpoint
-			const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute-async`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ input: initial }),
-			})
-			const asyncResult = await res.json()
-			const runId = asyncResult.runId
-			
-			// Poll for completion
-			let attempts = 0
-			const maxAttempts = 30
-			
-			while (attempts < maxAttempts) {
-				await new Promise(resolve => setTimeout(resolve, 1000))
+			try {
+				setIsRunning(true)
+				setRunOutput('🚀 Starting workflow execution...\n')
+				setRunStatus('starting')
 				
-				try {
-					const statusRes = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/status`)
-					const status = await statusRes.json()
-					
-					if (status.status === 'succeeded' || status.status === 'failed') {
-						setRunOutput(JSON.stringify(status.logs, null, 2))
-						return
-					}
-					
-					attempts++
-				} catch (error) {
-					attempts++
-				}
+				// Start async execution
+				const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute-async`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ input: initial }),
+				})
+				const asyncResult = await res.json()
+				const runId = asyncResult.runId
+				setCurrentRunId(runId)
+				
+				setRunOutput(prev => prev + `📋 Run ID: ${runId}\n⏳ Polling for updates every 2 seconds...\n\n`)
+				
+				// Start real-time polling
+				startPolling(beBase, workflowId, runId)
+				
+			} catch (error) {
+				setIsRunning(false)
+				setRunStatus('error')
+				setRunOutput(`❌ Failed to start workflow: ${error}`)
 			}
-			
-			setRunOutput(`Workflow execution timed out after ${maxAttempts} seconds`)
 			return
 		}
+		
+		// Fallback to local execution
 		const res = executeWorkflow(wf, initial)
 		setRunOutput(JSON.stringify(res.logs, null, 2))
+	}
+
+	async function startPolling(beBase: string, workflowId: string, runId: string) {
+		let pollCount = 0
+		const maxPolls = 150 // 5 minutes max (150 * 2 seconds)
+		
+		const poll = async () => {
+			try {
+				const statusRes = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/status`)
+				const status = await statusRes.json()
+				
+				setRunStatus(status.status)
+				
+				// Format and display current status and logs
+				let output = `🚀 Workflow Execution (Run ID: ${runId})\n`
+				output += `📊 Status: ${status.status.toUpperCase()}\n`
+				output += `⏰ Started: ${new Date(status.startedAt).toLocaleTimeString()}\n`
+				if (status.finishedAt) {
+					output += `🏁 Finished: ${new Date(status.finishedAt).toLocaleTimeString()}\n`
+				}
+				output += `🔄 Poll #${pollCount + 1}\n\n`
+				
+				// Show task status
+				if (status.tasks && status.tasks.length > 0) {
+					output += `📋 Tasks (${status.tasks.length}):\n`
+					for (const task of status.tasks) {
+						const statusIcon = task.status === 'completed' ? '✅' : 
+										  task.status === 'running' ? '🔄' : 
+										  task.status === 'failed' ? '❌' : 
+										  task.status === 'queued' ? '⏳' : '⭕'
+						output += `  ${statusIcon} ${task.nodeType} (${task.status})\n`
+					}
+					output += '\n'
+				}
+				
+				// Show logs
+				if (status.logs && status.logs.length > 0) {
+					output += `📝 Logs (${status.logs.length}):\n`
+					for (const log of status.logs) {
+						const time = new Date(log.timestamp).toLocaleTimeString()
+						const icon = log.type === 'system' ? '🔧' : 
+									log.type === 'node-output' ? '📤' : '📋'
+						output += `  ${icon} [${time}] ${log.message}\n`
+					}
+				}
+				
+				setRunOutput(output)
+				
+				// Check if workflow is complete
+				if (status.status === 'succeeded' || status.status === 'failed') {
+					setIsRunning(false)
+					const finalIcon = status.status === 'succeeded' ? '🎉' : '💥'
+					setRunOutput(prev => prev + `\n${finalIcon} Workflow ${status.status}!\n`)
+					return
+				}
+				
+				// Continue polling if not complete and under max attempts
+				pollCount++
+				if (pollCount < maxPolls) {
+					const timeoutId = setTimeout(poll, 2000) // Poll every 2 seconds
+					setPollTimeoutId(timeoutId)
+				} else {
+					setIsRunning(false)
+					setRunStatus('timeout')
+					setRunOutput(prev => prev + `\n⏰ Polling stopped after ${maxPolls * 2} seconds\n`)
+				}
+				
+			} catch (error) {
+				console.error('Polling error:', error)
+				pollCount++
+				if (pollCount < maxPolls) {
+					const timeoutId = setTimeout(poll, 2000) // Continue polling even on errors
+					setPollTimeoutId(timeoutId)
+				} else {
+					setIsRunning(false)
+					setRunStatus('error')
+					setRunOutput(prev => prev + `\n❌ Polling failed: ${error}\n`)
+				}
+			}
+		}
+		
+		// Start first poll immediately
+		poll()
+	}
+
+	function handleStop() {
+		if (pollTimeoutId) {
+			clearTimeout(pollTimeoutId)
+			setPollTimeoutId(null)
+		}
+		setIsRunning(false)
+		setRunStatus('stopped')
+		setRunOutput(prev => prev + `\n⏹️ Polling stopped by user\n`)
+		setCurrentRunId(null)
 	}
 
 	const palette = useMemo(() => getPalette(), [])
@@ -195,7 +297,20 @@ function BuilderCanvas() {
 			<div className="flex items-center gap-2">
 				<input className="px-2 py-1 border rounded text-sm" placeholder="Workflow name" value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} />
 				<button className="text-sm px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50" onClick={handleSave}>Save</button>
-				<button className="text-sm px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50" onClick={handleRun}>Run</button>
+				<button 
+					className={`text-sm px-3 py-1.5 rounded-md border ${isRunning ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300 hover:bg-slate-50'}`} 
+					onClick={isRunning ? handleStop : handleRun}
+					disabled={isRunning && !currentRunId}
+				>
+					{isRunning ? '⏹️ Stop' : '▶️ Run'}
+				</button>
+				{isRunning && (
+					<div className="flex items-center gap-2 text-sm text-slate-600">
+						<div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+						<span>Status: {runStatus || 'starting'}</span>
+						{currentRunId && <span className="text-xs text-slate-400">ID: {currentRunId.slice(0, 8)}...</span>}
+					</div>
+				)}
 			</div>
 			<div className="flex gap-4">
 				<aside className="w-64 shrink-0 border border-slate-200 rounded-lg bg-white p-3 h-[80vh]">
@@ -235,8 +350,16 @@ function BuilderCanvas() {
 			</div>
 			{runOutput && (
 				<div className="mt-2">
-					<div className="text-sm font-medium">Run output</div>
-					<pre className="text-xs bg-slate-50 border rounded p-2 max-h-40 overflow-auto">{runOutput}</pre>
+					<div className="flex items-center justify-between mb-2">
+						<div className="text-sm font-medium">Workflow Execution</div>
+						{isRunning && (
+							<div className="flex items-center gap-2 text-xs text-slate-500">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+								<span>Live updates every 2s</span>
+							</div>
+						)}
+					</div>
+					<pre className="text-xs bg-slate-50 border rounded p-3 max-h-96 overflow-auto font-mono whitespace-pre-wrap">{runOutput}</pre>
 				</div>
 			)}
 
