@@ -27,14 +27,25 @@
   stroke-width: 3;
 }
 
-/* Node size constraints */
+/* Node size constraints and spacing */
 .react-flow__node {
   font-size: 12px;
+  margin: 8px; /* Add some margin around nodes */
 }
 
 .react-flow__node .react-flow__node-default {
-  min-width: 120px !important;
-  max-width: 200px !important;
+  min-width: 160px !important;
+  max-width: 220px !important;
+}
+
+/* Better node appearance */
+.react-flow__node {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.react-flow__node.selected {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 /* Prevent text overflow in nodes */

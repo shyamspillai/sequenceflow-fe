@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { autoLayout, shouldAutoLayout } from '../utils/layout/autoLayout'
 import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, IfElseNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
@@ -20,7 +21,7 @@ function BuilderCanvas() {
 	const nodeTypes = useMemo(() => getReactFlowNodeTypes(), [])
 	const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode<any>>([])
 	const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-	const { screenToFlowPosition } = useReactFlow()
+	const { screenToFlowPosition, fitView } = useReactFlow()
 	const [editingInputNodeId, setEditingInputNodeId] = useState<string | null>(null)
 	const [editingDecisionNodeId, setEditingDecisionNodeId] = useState<string | null>(null)
 	const [editingIfElseNodeId, setEditingIfElseNodeId] = useState<string | null>(null)
@@ -40,6 +41,27 @@ function BuilderCanvas() {
 	const [runStatus, setRunStatus] = useState<string>('')
 	const [pollTimeoutId, setPollTimeoutId] = useState<number | null>(null)
 	const logsRef = useRef<HTMLDivElement>(null)
+
+	// Auto-layout function
+	const handleAutoLayout = useCallback(() => {
+		const layoutedNodes = autoLayout(nodes, edges, {
+			horizontalSpacing: 200,
+			verticalSpacing: 120,
+			startX: 200,
+			startY: 100
+		})
+		setNodes(layoutedNodes)
+		
+		// Fit view after layout
+		setTimeout(() => {
+			fitView({ 
+				padding: 0.15,
+				minZoom: 0.5,
+				maxZoom: 1.2,
+				duration: 500
+			})
+		}, 100)
+	}, [nodes, edges, setNodes, fitView])
 
 	useEffect(() => {
 		let isMounted = true
@@ -61,13 +83,34 @@ function BuilderCanvas() {
 						updatedNodes = applyConnectionEffects(updatedNodes as Array<FlowNode<WorkflowNodeData>>, connection)
 					}
 					
-					setNodes(updatedNodes)
+					// Apply auto-layout if nodes are too close together
+					let layoutedNodes = updatedNodes
+					if (shouldAutoLayout(updatedNodes)) {
+						layoutedNodes = autoLayout(updatedNodes, edges, {
+							horizontalSpacing: 200,
+							verticalSpacing: 120,
+							startX: 200,
+							startY: 100
+						})
+					}
+					
+					setNodes(layoutedNodes)
 					setEdges(edges)
 					setWorkflowName(wf.name)
 					setWorkflowId(wf.id)
 					setCreatedAt(wf.createdAt)
 					// Clear input node values when loading a workflow
 					setInputNodeValues({})
+					
+					// Set better initial zoom and fit view
+					setTimeout(() => {
+						fitView({ 
+							padding: 0.15,
+							minZoom: 0.5,
+							maxZoom: 1.2,
+							duration: 300
+						})
+					}, 100)
 				}
 			} else {
 				setNodes([])
@@ -355,6 +398,16 @@ function BuilderCanvas() {
 				/>
 				<button 
 					className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+					onClick={handleAutoLayout}
+					title="Auto-arrange nodes with better spacing"
+				>
+					<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+					</svg>
+					Layout
+				</button>
+				<button 
+					className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
 					onClick={handleSave}
 				>
 					<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -486,6 +539,14 @@ function BuilderCanvas() {
 						onDrop={onDrop}
 						onDragOver={onDragOver}
 						fitView
+						defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+						minZoom={0.3}
+						maxZoom={2}
+						fitViewOptions={{
+							padding: 0.15,
+							minZoom: 0.5,
+							maxZoom: 1.2
+						}}
 					>
 						<Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="#cbd5e1" />
 						{/* <MiniMap pannable zoomable nodeColor={() => '#0ea5e9'} nodeStrokeColor={() => '#0369a1'} maskColor="rgba(241,245,249,0.9)" /> */}

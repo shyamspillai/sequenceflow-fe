@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { InputFieldConfig, InputKind } from '../../types/workflow'
 import RuleBuilder from '../validation/RuleBuilder'
 import type { AnyValidationConfig } from '../../types/validation'
@@ -21,6 +21,14 @@ export default function NodeEditModal({ isOpen, fields, currentValues, onClose, 
 	const [testValues, setTestValues] = useState<Record<string, string>>(
 		Object.fromEntries(localFields.map((f) => [f.key, String(currentValues[f.key] ?? f.defaultValue ?? '')])) as Record<string, string>
 	)
+
+	// Sync localFields when fields prop changes
+	useEffect(() => {
+		setLocalFields(fields)
+		setSelectedFieldId(fields[0]?.id ?? null)
+		// Also update testValues based on new fields
+		setTestValues(Object.fromEntries(fields.map((f) => [f.key, String(currentValues[f.key] ?? f.defaultValue ?? '')])) as Record<string, string>)
+	}, [fields, currentValues])
 
 	const expectations = useMemo(() => {
 		const shape: Record<string, unknown> = {}
