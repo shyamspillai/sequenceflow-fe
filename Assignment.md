@@ -97,35 +97,6 @@ POST   /workflows/api/mock/building/ac/control         # AC system control
 POST   /workflows/api/mock/triggers/temperature-alert  # Automated triggers
 ```
 
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js 18+
-- Docker and Docker Compose
-- npm or yarn
-
-### Installation & Setup
-```bash
-# Clone the repository
-git clone <repository-url>
-cd workflow-orchestration-engine
-
-# Backend setup
-cd sequence-be
-npm install
-docker compose -f docker-compose.dev.yml up -d
-npm run build
-
-# Frontend setup (in new terminal)
-cd ../sequence-flow
-npm install
-npm start
-
-# Access the application
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:3000 (API routes)
-# BullMQ Dashboard: http://localhost:3001
-```
 
 ### Creating a Sample Workflow
 
@@ -222,7 +193,7 @@ The system includes 5 pre-configured workflows:
   - Database schema design and optimization
   - Debugging complex workflow execution issues
   - Code refactoring and optimization
-  **Stitch by Google**: For generating UI samples
+-**Stitch by Google**: For generating UI samples
 
 ### Key Open Source Libraries
 
