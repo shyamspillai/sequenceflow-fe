@@ -11,7 +11,7 @@ export default function Landing() {
 				<Link to="/sequences" className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">
 					Open Sequences
 				</Link>
-				<a href="https://example.com" target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50">
+				<a href="https://github.com/shyamspillai/sequenceflow-be/blob/main/Assignment.md" target="_blank" rel="noreferrer" className="inline-flex items-center px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50">
 					Learn More
 				</a>
 			</div>

@@ -8,9 +8,6 @@ export default function PublicLayout() {
 					<Link to="/" className="font-semibold tracking-tight text-slate-900">
 						Sequence Flow
 					</Link>
-					<nav className="text-sm text-slate-600">
-						<Link to="/sequences" className="hover:text-slate-900">Enter App</Link>
-					</nav>
 				</div>
 			</header>
 			<main className="mx-auto max-w-5xl px-6 py-12">
