@@ -13,7 +13,7 @@
       // This will be overridden by environment variables in production
       window.SEQUENCE_BE_BASE_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:3000' 
-        : (window.VITE_SEQUENCE_BE_BASE_URL || 'backendurl.com.remove.me')
+        : (window.VITE_SEQUENCE_BE_BASE_URL || '')  // Empty string = same origin
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
