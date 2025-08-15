@@ -9,6 +9,6 @@
     }
   ],
   "env": {
-    "VITE_SEQUENCE_BE_BASE_URL": "@sequence_be_base_url"
+    "VITE_SEQUENCE_BE_BASE_URL": "http://68.183.246.88:3000"
   }
 }
