@@ -44,12 +44,13 @@ function makeInputTextDef(): NodeDefinition {
 		reactFlowComponent: InputTextNodeComponent,
 		createBase(): WorkflowNode {
 			const fields: InputFieldConfig[] = []
+			const outputSchema = inputFieldsToJsonSchema(fields)
 			return {
 				id: crypto.randomUUID(),
 				type: 'inputText',
 				name: 'Input Node',
 				inputSchema: {},
-				outputSchema: {},
+				outputSchema,
 				config: { fields },
 				validationLogic: undefined,
 				connections: [],
@@ -58,9 +59,8 @@ function makeInputTextDef(): NodeDefinition {
 		dataFromBase(base: WorkflowNode): WorkflowNodeData { return { base: base as InputTextNode, value: {}, errors: {} } as any },
 		applyConnectionEffect(source, target) {
 			if ((source.base as any).type !== 'inputText') return target
-			const fields: InputFieldConfig[] = (source.base as InputTextNode).config.fields
-			const schema = inputFieldsToJsonSchema(fields)
-			return { ...target, base: { ...target.base, inputSchema: schema } as any }
+			const sourceSchema = (source.base as any).outputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema } as any }
 		},
 		execute(base, payload) {
 			return { logs: [{ kind: 'input', nodeId: (base as any).id, name: base.name, content: `Input: ${JSON.stringify(payload)}` }] }

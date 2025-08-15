@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
-import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
+import { ReactFlow, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, IfElseNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
@@ -13,7 +13,8 @@ import { getDefaultRepository } from '../utils/persistence/LocalStorageWorkflowR
 import type { WorkflowRepository } from '../utils/persistence/WorkflowRepository'
 import { toPersistedWorkflow, fromPersistedWorkflow, validateWorkflowForSave } from '../utils/workflow/adapter'
 import { executeWorkflow } from '../utils/workflow/runner'
-import { applyConnectionEffects, createNodeOnDrop, getPalette, getReactFlowNodeTypes } from '../utils/workflow/registry'
+import { applyConnectionEffects, createNodeOnDrop, getReactFlowNodeTypes } from '../utils/workflow/registry'
+import { inputFieldsToJsonSchema } from '../utils/schema'
 
 function BuilderCanvas() {
 	const nodeTypes = useMemo(() => getReactFlowNodeTypes(), [])
@@ -46,7 +47,20 @@ function BuilderCanvas() {
 				const wf = await repo.get(id)
 				if (wf && isMounted) {
 					const { nodes, edges } = fromPersistedWorkflow(wf)
-					setNodes(nodes)
+					
+					// Re-apply connection effects to ensure schemas are properly propagated
+					let updatedNodes = nodes
+					for (const edge of edges) {
+						const connection = { 
+							source: edge.source, 
+							target: edge.target, 
+							sourceHandle: edge.sourceHandle ?? null, 
+							targetHandle: edge.targetHandle ?? null 
+						}
+						updatedNodes = applyConnectionEffects(updatedNodes as Array<FlowNode<WorkflowNodeData>>, connection)
+					}
+					
+					setNodes(updatedNodes)
 					setEdges(edges)
 					setWorkflowName(wf.name)
 					setWorkflowId(wf.id)
@@ -298,7 +312,7 @@ function BuilderCanvas() {
 		setCurrentRunId(null)
 	}
 
-	const palette = useMemo(() => getPalette(), [])
+
 	
 	// Group nodes by function type
 	const groupedNodes = useMemo(() => {
@@ -544,16 +558,30 @@ function BuilderCanvas() {
 				currentValues={editingInputNode?.data.value ?? {}}
 				onClose={() => setEditingInputNodeId(null)}
 				onSave={(updates) => {
-					setNodes((prev) => prev.map(n => n.id === editingInputNodeId ? {
-						...n,
-						data: {
-							...n.data,
-							base: {
-								...n.data.base,
-								config: { ...n.data.base.config, fields: updates.fields },
-							},
+					const updatedOutputSchema = inputFieldsToJsonSchema(updates.fields)
+					setNodes((prev) => {
+						// First update the input node with new schema
+						let updatedNodes = prev.map(n => n.id === editingInputNodeId ? {
+							...n,
+							data: {
+								...n.data,
+								base: {
+									...n.data.base,
+									config: { ...n.data.base.config, fields: updates.fields },
+									outputSchema: updatedOutputSchema,
+								},
+							}
+						} : n)
+						
+						// Then re-apply connection effects for all edges from this node
+						const affectedEdges = edges.filter(e => e.source === editingInputNodeId)
+						for (const edge of affectedEdges) {
+							const connection = { source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null }
+							updatedNodes = applyConnectionEffects(updatedNodes, connection)
 						}
-					} : n))
+						
+						return updatedNodes
+					})
 					setEditingInputNodeId(null)
 				}}
 			/>
