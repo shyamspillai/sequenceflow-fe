@@ -150,13 +150,38 @@ function BuilderCanvas() {
 		
 		const beBase = (import.meta as any)?.env?.VITE_SEQUENCE_BE_BASE_URL || (window as any)?.SEQUENCE_BE_BASE_URL
 		if (beBase && workflowId) {
-			const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute`, {
+			// Use async execution endpoint
+			const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute-async`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ input: initial }),
 			})
-			const data = await res.json()
-			setRunOutput(JSON.stringify(data.logs, null, 2))
+			const asyncResult = await res.json()
+			const runId = asyncResult.runId
+			
+			// Poll for completion
+			let attempts = 0
+			const maxAttempts = 30
+			
+			while (attempts < maxAttempts) {
+				await new Promise(resolve => setTimeout(resolve, 1000))
+				
+				try {
+					const statusRes = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/status`)
+					const status = await statusRes.json()
+					
+					if (status.status === 'succeeded' || status.status === 'failed') {
+						setRunOutput(JSON.stringify(status.logs, null, 2))
+						return
+					}
+					
+					attempts++
+				} catch (error) {
+					attempts++
+				}
+			}
+			
+			setRunOutput(`Workflow execution timed out after ${maxAttempts} seconds`)
 			return
 		}
 		const res = executeWorkflow(wf, initial)

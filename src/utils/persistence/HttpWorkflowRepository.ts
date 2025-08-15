@@ -44,7 +44,54 @@ export class HttpWorkflowRepository implements WorkflowRepository {
 	}
 
 	async execute(id: string, input?: Record<string, unknown>): Promise<{ runId: string; logs: WorkflowRunLog[] }> {
-		return http<{ runId: string; logs: WorkflowRunLog[] }>(`/workflows/${encodeURIComponent(id)}/execute`, { method: 'POST', body: JSON.stringify({ input }) })
+		// Use async execution endpoint
+		const asyncResult = await http<{ runId: string }>(`/workflows/${encodeURIComponent(id)}/execute-async`, { 
+			method: 'POST', 
+			body: JSON.stringify({ input }) 
+		})
+
+		// Poll for completion and get final logs
+		const runId = asyncResult.runId
+		let attempts = 0
+		const maxAttempts = 30 // 30 seconds max wait
+		
+		while (attempts < maxAttempts) {
+			await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second
+			
+			try {
+				const status = await http<{
+					status: string
+					logs: Array<{
+						id: string
+						type: string
+						message: string
+						timestamp: string
+						nodeId?: string | null
+					}>
+				}>(`/workflows/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/status`)
+
+				if (status.status === 'succeeded' || status.status === 'failed') {
+					// Convert backend log format to frontend format
+					const logs: WorkflowRunLog[] = status.logs.map(log => ({
+						id: log.id,
+						type: log.type as any,
+						message: log.message,
+						timestamp: new Date(log.timestamp).getTime(),
+						nodePersistedId: log.nodeId || undefined,
+						data: undefined
+					}))
+					
+					return { runId, logs }
+				}
+				
+				attempts++
+			} catch (error) {
+				attempts++
+			}
+		}
+		
+		// If we timeout, return what we have
+		throw new Error(`Workflow execution timed out after ${maxAttempts} seconds`)
 	}
 
 	async listRuns(id: string): Promise<WorkflowRunSummary[]> {
