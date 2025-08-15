@@ -197,7 +197,8 @@ The system includes 5 pre-configured workflows:
   - Database schema design and optimization
   - Debugging complex workflow execution issues
   - Code refactoring and optimization
--**Stitch by Google**: For generating UI samples
+
+- **Stitch by Google**: For generating UI samples
 
 ### Key Open Source Libraries
 
