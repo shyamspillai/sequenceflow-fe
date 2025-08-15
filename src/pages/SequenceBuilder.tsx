@@ -299,6 +299,25 @@ function BuilderCanvas() {
 	}
 
 	const palette = useMemo(() => getPalette(), [])
+	
+	// Group nodes by function type
+	const groupedNodes = useMemo(() => {
+		const groups = {
+			'Input & Data': [
+				{ type: 'inputText', label: 'Input Node', description: 'Multiple fields', icon: '📝' }
+			],
+			'Logic & Control': [
+				{ type: 'decision', label: 'Decision', description: 'Binary or N-way outcomes', icon: '🔀' },
+				{ type: 'ifElse', label: 'If-Else', description: 'Binary condition with true/false outcomes', icon: '❓' }
+			],
+			'Actions': [
+				{ type: 'apiCall', label: 'API Call', description: 'HTTP request to external service', icon: '🌐' },
+				{ type: 'notification', label: 'Notification', description: 'Compose message template', icon: '📢' },
+				{ type: 'delay', label: 'Delay', description: 'Wait for a specified duration', icon: '⏱️' }
+			]
+		}
+		return groups
+	}, [])
 
 	return (
 		<div className="flex flex-col gap-4 h-screen bg-gray-50">
@@ -358,28 +377,68 @@ function BuilderCanvas() {
 				)}
 			</div>
 			<div className="flex gap-6 flex-1 min-h-0 px-6">
-				<aside className="w-72 shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+				<aside className="w-80 shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
 					<div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
 						<h3 className="text-sm font-semibold text-gray-900">Node Palette</h3>
-						<p className="text-xs text-gray-500 mt-1">Drag nodes to the canvas</p>
+						<p className="text-xs text-gray-500 mt-1">Drag nodes to the canvas to build your workflow</p>
 					</div>
-					<div className="p-4 space-y-3 max-h-full overflow-auto">
-						{palette.map(p => (
-							<div
-								key={p.type}
-								className="group rounded-lg border border-gray-200 p-3 bg-gradient-to-br from-white to-gray-50 cursor-move hover:border-blue-300 hover:shadow-sm transition-all duration-200"
-								draggable
-								onDragStart={(event) => {
-									event.dataTransfer.setData('application/reactflow', p.type)
-									event.dataTransfer.effectAllowed = 'move'
-								}}
-							>
-								<div className="text-sm font-medium text-gray-900 group-hover:text-blue-900">{p.label}</div>
-								{p.description && (
-									<div className="text-xs text-gray-500 mt-1 group-hover:text-blue-700">{p.description}</div>
-								)}
+					<div className="p-4 max-h-full overflow-auto">
+						{Object.entries(groupedNodes).map(([groupName, nodes]) => (
+							<div key={groupName} className="mb-6 last:mb-0">
+								{/* Group Header */}
+								<div className="flex items-center gap-2 mb-3">
+									<div className="h-px bg-gradient-to-r from-gray-300 to-transparent flex-1"></div>
+									<h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wider px-2">
+										{groupName}
+									</h4>
+									<div className="h-px bg-gradient-to-l from-gray-300 to-transparent flex-1"></div>
+								</div>
+								
+								{/* Group Nodes */}
+								<div className="space-y-2">
+									{nodes.map(node => (
+										<div
+											key={node.type}
+											className="group rounded-lg border border-gray-200 p-3 bg-gradient-to-br from-white to-gray-50 cursor-move hover:border-blue-300 hover:shadow-md hover:scale-[1.02] transition-all duration-200"
+											draggable
+											onDragStart={(event) => {
+												event.dataTransfer.setData('application/reactflow', node.type)
+												event.dataTransfer.effectAllowed = 'move'
+											}}
+										>
+											<div className="flex items-start gap-3">
+												<div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center text-lg group-hover:from-blue-200 group-hover:to-blue-300 transition-colors">
+													{node.icon}
+												</div>
+												<div className="flex-1 min-w-0">
+													<div className="text-sm font-medium text-gray-900 group-hover:text-blue-900 transition-colors">
+														{node.label}
+													</div>
+													<div className="text-xs text-gray-500 mt-1 group-hover:text-blue-700 transition-colors leading-relaxed">
+														{node.description}
+													</div>
+												</div>
+											</div>
+										</div>
+									))}
+								</div>
 							</div>
 						))}
+						
+						{/* Help Text */}
+						<div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+							<div className="flex items-start gap-2">
+								<svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+									<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+								</svg>
+								<div>
+									<p className="text-xs font-medium text-blue-900">Getting Started</p>
+									<p className="text-xs text-blue-700 mt-1">
+										Drag nodes from above onto the canvas, then connect them to create your workflow.
+									</p>
+								</div>
+							</div>
+						</div>
 					</div>
 				</aside>
 				<div className="flex-1 min-w-0 rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white relative">
