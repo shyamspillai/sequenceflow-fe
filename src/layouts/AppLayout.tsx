@@ -60,18 +60,14 @@ export default function AppLayout() {
 					</NavLink>
 				</nav>
 			</aside>
-			<div className="flex-1 min-w-0">
+			<div className="flex-1 min-w-0 flex flex-col">
 				<header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
 					<div className="px-6 py-4 flex items-center justify-between">
 						<div className="font-semibold tracking-tight text-slate-900">Sequence Flow</div>
 					</div>
 				</header>
-				<main className="px-6 py-6">
-					<div className="mx-auto max-w-6xl">
-						<div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-							<Outlet />
-						</div>
-					</div>
+				<main className="flex-1 min-h-0">
+					<Outlet />
 				</main>
 			</div>
 		</div>

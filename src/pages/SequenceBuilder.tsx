@@ -301,44 +301,88 @@ function BuilderCanvas() {
 	const palette = useMemo(() => getPalette(), [])
 
 	return (
-		<div className="flex flex-col gap-3">
-			<div className="flex items-center gap-2">
-				<input className="px-2 py-1 border rounded text-sm" placeholder="Workflow name" value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} />
-				<button className="text-sm px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50" onClick={handleSave}>Save</button>
+		<div className="flex flex-col gap-4 h-screen bg-gray-50">
+			<div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-200">
+				<input 
+					className="px-3 py-2 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors min-w-64" 
+					placeholder="Enter workflow name..." 
+					value={workflowName} 
+					onChange={(e) => setWorkflowName(e.target.value)} 
+				/>
 				<button 
-					className={`text-sm px-3 py-1.5 rounded-md border ${isRunning ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300 hover:bg-slate-50'}`} 
+					className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+					onClick={handleSave}
+				>
+					<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
+					</svg>
+					Save
+				</button>
+				<button 
+					className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+						isRunning 
+							? 'text-red-700 bg-red-50 border border-red-300 hover:bg-red-100 focus:ring-red-500' 
+							: 'text-white bg-green-600 border border-transparent hover:bg-green-700 focus:ring-green-500'
+					}`}
 					onClick={isRunning ? handleStop : handleRun}
 					disabled={isRunning && !currentRunId}
 				>
-					{isRunning ? '⏹️ Stop' : '▶️ Run'}
+					{isRunning ? (
+						<>
+							<svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+							</svg>
+							Stop
+						</>
+					) : (
+						<>
+							<svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+							</svg>
+							Run
+						</>
+					)}
 				</button>
 				{isRunning && (
-					<div className="flex items-center gap-2 text-sm text-slate-600">
-						<div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-						<span>Status: {runStatus || 'starting'}</span>
-						{currentRunId && <span className="text-xs text-slate-400">ID: {currentRunId.slice(0, 8)}...</span>}
+					<div className="flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+						<div className="flex items-center gap-2">
+							<div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+							<span className="text-sm font-medium text-blue-900">Status: {runStatus || 'starting'}</span>
+						</div>
+						{currentRunId && (
+							<span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+								ID: {currentRunId.slice(0, 8)}...
+							</span>
+						)}
 					</div>
 				)}
 			</div>
-			<div className="flex gap-4">
-				<aside className="w-64 shrink-0 border border-slate-200 rounded-lg bg-white p-3 h-[80vh]">
-					<div className="text-sm font-medium text-slate-800 mb-3">Nodes</div>
-					{palette.map(p => (
-						<div
-							key={p.type}
-							className="rounded-md border border-slate-200 p-3 bg-slate-50 cursor-move mb-2"
-							draggable
-							onDragStart={(event) => {
-								event.dataTransfer.setData('application/reactflow', p.type)
-								event.dataTransfer.effectAllowed = 'move'
-							}}
-						>
-							<div className="text-xs font-medium text-slate-700">{p.label}</div>
-							{p.description ? <div className="text-[11px] text-slate-500">{p.description}</div> : null}
-						</div>
-					))}
+			<div className="flex gap-6 flex-1 min-h-0 px-6">
+				<aside className="w-72 shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+					<div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+						<h3 className="text-sm font-semibold text-gray-900">Node Palette</h3>
+						<p className="text-xs text-gray-500 mt-1">Drag nodes to the canvas</p>
+					</div>
+					<div className="p-4 space-y-3 max-h-full overflow-auto">
+						{palette.map(p => (
+							<div
+								key={p.type}
+								className="group rounded-lg border border-gray-200 p-3 bg-gradient-to-br from-white to-gray-50 cursor-move hover:border-blue-300 hover:shadow-sm transition-all duration-200"
+								draggable
+								onDragStart={(event) => {
+									event.dataTransfer.setData('application/reactflow', p.type)
+									event.dataTransfer.effectAllowed = 'move'
+								}}
+							>
+								<div className="text-sm font-medium text-gray-900 group-hover:text-blue-900">{p.label}</div>
+								{p.description && (
+									<div className="text-xs text-gray-500 mt-1 group-hover:text-blue-700">{p.description}</div>
+								)}
+							</div>
+						))}
+					</div>
 				</aside>
-				<div className="flex-1 min-w-0 h-[80vh] rounded-lg overflow-hidden border border-slate-200">
+				<div className="flex-1 min-w-0 rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white relative">
 					<ReactFlow
 						nodes={nodes.map(attachEditor)}
 						edges={edges}
@@ -354,20 +398,84 @@ function BuilderCanvas() {
 						{/* <MiniMap pannable zoomable nodeColor={() => '#0ea5e9'} nodeStrokeColor={() => '#0369a1'} maskColor="rgba(241,245,249,0.9)" /> */}
 						<Controls showInteractive={false} />
 					</ReactFlow>
+					
+					{/* Zoom Help Indicator */}
+					<div className="absolute top-4 right-4 z-10">
+						<div className="group relative">
+							<div className="flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm cursor-help">
+								<svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+									<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+								</svg>
+								<span className="text-sm text-gray-700 font-medium">Navigation</span>
+							</div>
+							
+							{/* Tooltip */}
+							<div className="absolute right-0 top-full mt-2 w-64 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+								<div className="space-y-2">
+									<div className="flex items-center gap-2">
+										<svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+										</svg>
+										<span>Scroll up/down to zoom in/out</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3" />
+										</svg>
+										<span>Click and drag to pan around</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+										</svg>
+										<span>Double-click nodes to edit</span>
+									</div>
+								</div>
+								{/* Arrow pointing up */}
+								<div className="absolute -top-1 right-4 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+							</div>
+						</div>
+					</div>
 				</div>
 			</div>
 			{runOutput && (
-				<div className="mt-2">
-					<div className="flex items-center justify-between mb-2">
-						<div className="text-sm font-medium">Workflow Execution</div>
-						{isRunning && (
-							<div className="flex items-center gap-2 text-xs text-slate-500">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-								<span>Live updates every 2s</span>
+				<div className="px-6 pb-6">
+					<div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+						<div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<div className="w-8 h-8 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg flex items-center justify-center">
+										<svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+										</svg>
+									</div>
+									<div>
+										<h3 className="text-sm font-semibold text-gray-900">Workflow Execution</h3>
+										<p className="text-xs text-gray-500">Real-time execution logs and status</p>
+									</div>
+								</div>
+								{isRunning && (
+									<div className="flex items-center gap-2 px-3 py-1 bg-green-100 border border-green-200 rounded-full">
+										<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+										<span className="text-xs font-medium text-green-800">Live updates every 2s</span>
+									</div>
+								)}
 							</div>
-						)}
+						</div>
+						<div className="bg-gray-900 p-4">
+							<div className="bg-gray-800 px-4 py-2 rounded-t-lg border-b border-gray-700">
+								<div className="flex items-center gap-2">
+									<div className="flex gap-1.5">
+										<div className="w-3 h-3 bg-red-500 rounded-full"></div>
+										<div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+										<div className="w-3 h-3 bg-green-500 rounded-full"></div>
+									</div>
+									<span className="text-gray-300 text-sm font-mono">workflow-execution</span>
+								</div>
+							</div>
+							<pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto p-4 bg-gray-900 rounded-b-lg">{runOutput}</pre>
+						</div>
 					</div>
-					<pre className="text-xs bg-slate-50 border rounded p-3 max-h-96 overflow-auto font-mono whitespace-pre-wrap">{runOutput}</pre>
 				</div>
 			)}
 
