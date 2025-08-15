@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, IfElseNode, WorkflowNodeData } from '../types/workflow'
@@ -39,6 +39,7 @@ function BuilderCanvas() {
 	const [currentRunId, setCurrentRunId] = useState<string | null>(null)
 	const [runStatus, setRunStatus] = useState<string>('')
 	const [pollTimeoutId, setPollTimeoutId] = useState<number | null>(null)
+	const logsRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
 		let isMounted = true
@@ -190,6 +191,11 @@ function BuilderCanvas() {
 				setRunOutput('🚀 Starting workflow execution...\n')
 				setRunStatus('starting')
 				
+				// Scroll to logs section after a short delay
+				setTimeout(() => {
+					logsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+				}, 1000)
+				
 				// Start async execution
 				const res = await fetch(`${String(beBase).replace(/\/$/, '')}/workflows/${encodeURIComponent(workflowId)}/execute-async`, {
 					method: 'POST',
@@ -216,6 +222,11 @@ function BuilderCanvas() {
 		// Fallback to local execution
 		const res = executeWorkflow(wf, initial)
 		setRunOutput(JSON.stringify(res.logs, null, 2))
+		
+		// Scroll to logs section after a short delay
+		setTimeout(() => {
+			logsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+		}, 500)
 	}
 
 	async function startPolling(beBase: string, workflowId: string, runId: string) {
@@ -334,7 +345,7 @@ function BuilderCanvas() {
 	}, [])
 
 	return (
-		<div className="flex flex-col gap-4 h-screen bg-gray-50">
+		<div className="flex flex-col gap-4 min-h-screen bg-gray-50">
 			<div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-200">
 				<input 
 					className="px-3 py-2 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors min-w-64" 
@@ -387,10 +398,19 @@ function BuilderCanvas() {
 								ID: {currentRunId.slice(0, 8)}...
 							</span>
 						)}
+						<button 
+							onClick={() => logsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+							className="flex items-center gap-2 text-xs text-blue-700 ml-2 hover:text-blue-800 transition-colors cursor-pointer"
+						>
+							<svg className="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+							</svg>
+							<span>Scroll down for logs</span>
+						</button>
 					</div>
 				)}
 			</div>
-			<div className="flex gap-6 flex-1 min-h-0 px-6">
+			<div className="flex gap-6 px-6" style={{ height: '80vh' }}>
 				<aside className="w-80 shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
 					<div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
 						<h3 className="text-sm font-semibold text-gray-900">Node Palette</h3>
@@ -512,7 +532,7 @@ function BuilderCanvas() {
 				</div>
 			</div>
 			{runOutput && (
-				<div className="px-6 pb-6">
+				<div ref={logsRef} className="px-6 pb-6 transition-all duration-500 ease-in-out">
 					<div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
 						<div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
 							<div className="flex items-center justify-between">
@@ -546,7 +566,7 @@ function BuilderCanvas() {
 									<span className="text-gray-300 text-sm font-mono">workflow-execution</span>
 								</div>
 							</div>
-							<pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap max-h-96 overflow-auto p-4 bg-gray-900 rounded-b-lg">{runOutput}</pre>
+							<pre className="text-sm text-gray-300 font-mono whitespace-pre-wrap min-h-96 overflow-auto p-4 bg-gray-900 rounded-b-lg">{runOutput}</pre>
 						</div>
 					</div>
 				</div>
