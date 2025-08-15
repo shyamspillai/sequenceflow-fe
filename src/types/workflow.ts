@@ -84,6 +84,34 @@ export type DecisionNodeData = {
 	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
+export type IfElseCondition = {
+	id: string
+	name: string
+	// Multi-predicate mode for complex conditions
+	predicates: DecisionPredicate[]
+	combiner: 'all' | 'any'
+}
+
+export type IfElseNodeConfig = {
+	condition: IfElseCondition
+	trueLabel: string
+	falseLabel: string
+}
+
+export type IfElseNode = BaseNode<'ifElse', IfElseNodeConfig> & {
+	// inputSchema should mirror upstream node's output schema when connected
+	inputSchema: JSONSchema
+	outputSchema: JSONSchema
+}
+
+export type IfElseNodeData = {
+	base: IfElseNode
+	sampleInput?: Record<string, unknown>
+	openEditor?: (nodeId: string) => void
+	inputValue?: Record<string, unknown>
+	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
+}
+
 export type NotificationNodeConfig = {
 	template: string
 }
@@ -193,5 +221,5 @@ export type DelayNodeData = {
 	updateOutput?: (nodeId: string, output: Record<string, unknown>) => void
 }
 
-export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode | ApiCallNode | DelayNode
-export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData | ApiCallNodeData | DelayNodeData 
+export type WorkflowNode = InputTextNode | DecisionNode | NotificationNode | ApiCallNode | DelayNode | IfElseNode
+export type WorkflowNodeData = InputTextNodeData | DecisionNodeData | NotificationNodeData | ApiCallNodeData | DelayNodeData | IfElseNodeData 

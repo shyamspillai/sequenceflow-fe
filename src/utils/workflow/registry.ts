@@ -4,6 +4,7 @@ import DecisionNodeComponent from '../../components/nodes/DecisionNode'
 import NotificationNodeComponent from '../../components/nodes/NotificationNode'
 import ApiCallNodeComponent from '../../components/nodes/ApiCallNode'
 import DelayNodeComponent from '../../components/nodes/DelayNode'
+import IfElseNodeComponent from '../../components/nodes/IfElseNode'
 import type {
 	WorkflowNodeData,
 	WorkflowNode,
@@ -13,6 +14,7 @@ import type {
 	NotificationNode,
 	ApiCallNode,
 	DelayNode,
+	IfElseNode,
 	HttpMethod,
 } from '../../types/workflow'
 import { inputFieldsToJsonSchema } from '../schema'
@@ -108,6 +110,61 @@ function makeDecisionDef(): NodeDefinition {
 			const matchedIds = Array.from(matches)
 			const logs = [{ kind: 'decision' as const, nodeId: (base as any).id, name: (base as any).name, content: `Matched ${matchedIds.length} outcome(s): ${matchedIds.join(', ') || 'none'}` }]
 			const allowedSourceHandles = new Set<string>([...matchedIds.map(id => `out-${id}`)])
+			return { logs, allowedSourceHandles }
+		},
+	}
+}
+
+function makeIfElseDef(): NodeDefinition {
+	return {
+		type: 'ifElse',
+		palette: { type: 'ifElse', label: 'If-Else', description: 'Binary condition with true/false outcomes' },
+		reactFlowComponent: IfElseNodeComponent,
+		createBase(): WorkflowNode {
+			return {
+				id: crypto.randomUUID(),
+				type: 'ifElse',
+				name: 'If-Else',
+				inputSchema: {},
+				outputSchema: {},
+				config: { 
+					condition: {
+						id: crypto.randomUUID(),
+						name: 'Condition',
+						predicates: [],
+						combiner: 'all'
+					},
+					trueLabel: 'True',
+					falseLabel: 'False'
+				},
+				validationLogic: undefined,
+				connections: [],
+			}
+		},
+		dataFromBase(base: WorkflowNode): WorkflowNodeData { return { base: base as IfElseNode, sampleInput: {} } as any },
+		applyConnectionEffect(source, target) {
+			if ((target.base as any).type !== 'ifElse') return target
+			const sourceSchema = (source.base as any).outputSchema || (source.base as any).inputSchema
+			return { ...target, base: { ...target.base, inputSchema: sourceSchema } as any }
+		},
+		execute(base, payload) {
+			const cfg: any = (base as any).config ?? {}
+			const condition = cfg.condition
+			let conditionMet = false
+			
+			if (condition && Array.isArray(condition.predicates) && condition.predicates.length > 0) {
+				const checks = condition.predicates.map((p: any) => {
+					const value = p.targetField ? getByPath(payload, p.targetField) : payload
+					return applyJsonLogic(p.validationLogic, { value }).isValid
+				})
+				const combiner = (condition.combiner ?? 'all') as 'all' | 'any'
+				conditionMet = combiner === 'all' ? checks.every(Boolean) : checks.some(Boolean)
+			}
+			
+			const outcome = conditionMet ? 'true' : 'false'
+			const outcomeLabel = conditionMet ? (cfg.trueLabel || 'True') : (cfg.falseLabel || 'False')
+			const logs = [{ kind: 'decision' as const, nodeId: (base as any).id, name: (base as any).name, content: `Condition evaluated to: ${outcomeLabel}` }]
+			const allowedSourceHandles = new Set<string>([`out-${outcome}`])
 			return { logs, allowedSourceHandles }
 		},
 	}
@@ -273,7 +330,7 @@ function makeDelayDef(): NodeDefinition {
 	}
 }
 
-const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeNotificationDef(), makeApiCallDef(), makeDelayDef()]
+const registry: NodeDefinition[] = [makeInputTextDef(), makeDecisionDef(), makeIfElseDef(), makeNotificationDef(), makeApiCallDef(), makeDelayDef()]
 
 export function getReactFlowNodeTypes(): Record<string, React.ComponentType<any>> {
 	const map: Record<string, React.ComponentType<any>> = {}

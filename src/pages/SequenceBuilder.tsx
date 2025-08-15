@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, MiniMap, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, WorkflowNodeData } from '../types/workflow'
+import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, IfElseNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
+import IfElseNodeEditModal from '../components/nodes/IfElseNodeEditModal'
 import NotificationNodeEditModal from '../components/nodes/NotificationNodeEditModal'
 import ApiCallNodeEditModal from '../components/nodes/ApiCallNodeEditModal'
 import DelayNodeEditModal from '../components/nodes/DelayNodeEditModal'
@@ -21,6 +22,7 @@ function BuilderCanvas() {
 	const { screenToFlowPosition } = useReactFlow()
 	const [editingInputNodeId, setEditingInputNodeId] = useState<string | null>(null)
 	const [editingDecisionNodeId, setEditingDecisionNodeId] = useState<string | null>(null)
+	const [editingIfElseNodeId, setEditingIfElseNodeId] = useState<string | null>(null)
 	const [editingNotificationNodeId, setEditingNotificationNodeId] = useState<string | null>(null)
 	const [editingApiCallNodeId, setEditingApiCallNodeId] = useState<string | null>(null)
 	const [editingDelayNodeId, setEditingDelayNodeId] = useState<string | null>(null)
@@ -79,6 +81,7 @@ function BuilderCanvas() {
 		if (!n) return
 		if (n.type === 'inputText') setEditingInputNodeId(nodeId)
 		if (n.type === 'decision') setEditingDecisionNodeId(nodeId)
+		if (n.type === 'ifElse') setEditingIfElseNodeId(nodeId)
 		if (n.type === 'notification') setEditingNotificationNodeId(nodeId)
 		if (n.type === 'apiCall') setEditingApiCallNodeId(nodeId)
 		if (n.type === 'delay') setEditingDelayNodeId(nodeId)
@@ -126,6 +129,7 @@ function BuilderCanvas() {
 
 	const editingInputNode = useMemo(() => nodes.find(n => n.id === editingInputNodeId) ?? null, [nodes, editingInputNodeId])
 	const editingDecisionNode = useMemo(() => nodes.find(n => n.id === editingDecisionNodeId) ?? null, [nodes, editingDecisionNodeId])
+	const editingIfElseNode = useMemo(() => nodes.find(n => n.id === editingIfElseNodeId) ?? null, [nodes, editingIfElseNodeId])
 	const editingNotificationNode = useMemo(() => nodes.find(n => n.id === editingNotificationNodeId) ?? null, [nodes, editingNotificationNodeId])
 	const editingApiCallNode = useMemo(() => nodes.find(n => n.id === editingApiCallNodeId) ?? null, [nodes, editingApiCallNodeId])
 	const editingDelayNode = useMemo(() => nodes.find(n => n.id === editingDelayNodeId) ?? null, [nodes, editingDelayNodeId])
@@ -249,7 +253,7 @@ function BuilderCanvas() {
 				// Check if workflow is complete
 				if (status.status === 'succeeded' || status.status === 'failed') {
 					setIsRunning(false)
-					const finalIcon = status.status === 'succeeded' ? '🎉' : '💥'
+					const finalIcon = status.status === 'succeeded' ? '🎉' : '��'
 					setRunOutput(prev => prev + `\n${finalIcon} Workflow ${status.status}!\n`)
 					return
 				}
@@ -404,6 +408,32 @@ function BuilderCanvas() {
 							}
 						} : n))
 						setEditingDecisionNodeId(null)
+					}}
+				/>
+			)}
+
+			{editingIfElseNode && (
+				<IfElseNodeEditModal
+					isOpen={Boolean(editingIfElseNode)}
+					node={editingIfElseNode.data.base as IfElseNode}
+					onClose={() => setEditingIfElseNodeId(null)}
+					onSave={(updates) => {
+						setNodes((prev) => prev.map(n => n.id === editingIfElseNodeId ? {
+							...n,
+							data: {
+								...n.data,
+								base: {
+									...n.data.base,
+									config: { 
+										...(n.data.base as IfElseNode).config, 
+										condition: updates.condition,
+										trueLabel: updates.trueLabel,
+										falseLabel: updates.falseLabel
+									},
+								},
+							}
+						} : n))
+						setEditingIfElseNodeId(null)
 					}}
 				/>
 			)}
