@@ -4,6 +4,10 @@
 
 This document outlines the implementation of a comprehensive Workflow Orchestration Engine that enables users to design, visualize, and execute complex workflows through a modern web interface. The system supports both sequential and branching workflow patterns with real-time execution monitoring.
 
+
+![Demo](assets/demousage.gif)
+
+
 ## 🎯 Assignment Completion Status
 
 ### ✅ Fully Implemented Features
