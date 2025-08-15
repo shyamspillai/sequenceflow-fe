@@ -1,8 +1,11 @@
 # 🚀 Workflow Orchestration Engine - Local Setup
 
+This is a simple workflow editor for building and executing workflows.
+It serves as the frontend for the workflow orchestration engine available at [sequenceflow-be](https://github.com/shyamspillai/sequenceflow-be).
+
+
 ### Prerequisites
 - **Node.js 20.19.4** ([Download here](https://nodejs.org/))
-- I have used Node v20.19.4 for this project.
 
 
 ### 1. Clone & Navigate
