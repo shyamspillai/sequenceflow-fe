@@ -72,17 +72,17 @@ export function autoLayout<T extends Record<string, unknown> = any>(nodes: Node<
     })
   }
 
-  // Position nodes by level
+  // Position nodes by level (horizontal layout)
   levels.forEach((levelNodes, levelIndex) => {
-    const levelY = opts.startY + levelIndex * (opts.nodeHeight + opts.verticalSpacing)
+    const levelX = opts.startX + levelIndex * (opts.nodeWidth + opts.horizontalSpacing)
     
-    // Center nodes horizontally within the level
-    const totalWidth = levelNodes.length * opts.nodeWidth + (levelNodes.length - 1) * opts.horizontalSpacing
-    const startX = opts.startX - totalWidth / 2 + opts.nodeWidth / 2
+    // Center nodes vertically within the level
+    const totalHeight = levelNodes.length * opts.nodeHeight + (levelNodes.length - 1) * opts.verticalSpacing
+    const startY = opts.startY - totalHeight / 2 + opts.nodeHeight / 2
     
     levelNodes.forEach((nodeId, nodeIndex) => {
-      const x = startX + nodeIndex * (opts.nodeWidth + opts.horizontalSpacing)
-      positioned.set(nodeId, { x, y: levelY })
+      const y = startY + nodeIndex * (opts.nodeHeight + opts.verticalSpacing)
+      positioned.set(nodeId, { x: levelX, y })
     })
   })
 

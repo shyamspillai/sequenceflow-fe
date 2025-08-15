@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { ReactFlow, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, addEdge, type Node as FlowNode, type Edge, type Connection, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { autoLayout, shouldAutoLayout } from '../utils/layout/autoLayout'
+import { autoLayout } from '../utils/layout/autoLayout'
 import type { InputTextNodeData, DecisionNode, NotificationNode, ApiCallNode, DelayNode, IfElseNode, WorkflowNodeData } from '../types/workflow'
 import NodeEditModal from '../components/nodes/NodeEditModal'
 import DecisionNodeEditModal from '../components/nodes/DecisionNodeEditModal'
@@ -48,7 +48,7 @@ function BuilderCanvas() {
 			horizontalSpacing: 200,
 			verticalSpacing: 120,
 			startX: 200,
-			startY: 100
+			startY: 200
 		})
 		setNodes(layoutedNodes)
 		
@@ -83,16 +83,13 @@ function BuilderCanvas() {
 						updatedNodes = applyConnectionEffects(updatedNodes as Array<FlowNode<WorkflowNodeData>>, connection)
 					}
 					
-					// Apply auto-layout if nodes are too close together
-					let layoutedNodes = updatedNodes
-					if (shouldAutoLayout(updatedNodes)) {
-						layoutedNodes = autoLayout(updatedNodes, edges, {
-							horizontalSpacing: 200,
-							verticalSpacing: 120,
-							startX: 200,
-							startY: 100
-						})
-					}
+					// Always apply auto-layout on load for better arrangement
+					const layoutedNodes = autoLayout(updatedNodes, edges, {
+						horizontalSpacing: 200,
+						verticalSpacing: 120,
+						startX: 200,
+						startY: 200
+					})
 					
 					setNodes(layoutedNodes)
 					setEdges(edges)
