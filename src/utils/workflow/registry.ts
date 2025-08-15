@@ -1,3 +1,4 @@
+import React from 'react'
 import { type Node as FlowNode, type XYPosition, type Connection } from '@xyflow/react'
 import InputTextNodeComponent from '../../components/nodes/InputTextNode'
 import DecisionNodeComponent from '../../components/nodes/DecisionNode'
