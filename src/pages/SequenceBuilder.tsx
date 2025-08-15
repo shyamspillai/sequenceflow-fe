@@ -347,7 +347,7 @@ function BuilderCanvas() {
 						fitView
 					>
 						<Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="#cbd5e1" />
-						<MiniMap pannable zoomable nodeColor={() => '#0ea5e9'} nodeStrokeColor={() => '#0369a1'} maskColor="rgba(241,245,249,0.9)" />
+						{/* <MiniMap pannable zoomable nodeColor={() => '#0ea5e9'} nodeStrokeColor={() => '#0369a1'} maskColor="rgba(241,245,249,0.9)" /> */}
 						<Controls showInteractive={false} />
 					</ReactFlow>
 				</div>
